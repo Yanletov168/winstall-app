@@ -1,0 +1,18 @@
+# .NET / Visual Studio
+bin/
+obj/
+.vs/
+*.user
+*.suo
+TestResults/
+
+# Сборка portable (генерируется локально, в релизы — через GitHub Releases)
+portable/
+
+# Локальные пользовательские файлы
+language.txt
+locales/*-local.json
+
+# Windows
+Thumbs.db
+Desktop.ini

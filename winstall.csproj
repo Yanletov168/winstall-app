@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>winstall</AssemblyName>
+    <RootNamespace>winstall</RootNamespace>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <!-- Чистый Win32-вид, без лишних зависимостей. Собирается на VS2019+ / BuildTools. -->
+    <!-- На Windows 10 IoT Enterprise LTSC 21H2 работает из коробки (.NET Framework 4.8 встроен). -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Чтобы собиралось SDK 8 без установленной VS (нужно для portable-сборки здесь) -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- Файлы локализации едут рядом с exe -->
+    <Content Include="locales\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- Тесты и portable-артефакты — не часть сборки -->
+    <Compile Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+    <Content Remove="tests\**" />
+    <None Remove="tests\**" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>parsetest</AssemblyName>
+    <RootNamespace>parsetest</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Тестируем исходники основного проекта напрямую, без копий -->
+  <ItemGroup>
+    <Compile Include="..\..\Models.cs" Link="Src\Models.cs" />
+    <Compile Include="..\..\WingetRunner.cs" Link="Src\WingetRunner.cs" />
+    <Compile Include="..\..\Localization.cs" Link="Src\Localization.cs" />
+    <Compile Include="..\..\AutoCheck.cs" Link="Src\AutoCheck.cs" />
+  </ItemGroup>
+
+</Project>
