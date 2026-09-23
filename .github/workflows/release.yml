@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Version from tag
+        shell: pwsh
+        run: echo "VERSION=$($env:GITHUB_REF_NAME.TrimStart('v'))" >> $env:GITHUB_ENV
+
+      - name: Build net48 portable
+        shell: pwsh
+        run: |
+          dotnet build winstall.csproj -c Release -f net48 --nologo -v q /p:Version=$env:VERSION
+          New-Item -ItemType Directory -Path release-pkg -Force
+          Compress-Archive -LiteralPath "bin\Release\net48\winstall.exe", "bin\Release\net48\locales" `
+            -DestinationPath "release-pkg\winstall-portable-net48.zip" -Force
+
+      - name: Publish net8 (x64, x86, arm64)
+        shell: pwsh
+        run: |
+          foreach ($rid in @('win-x64','win-x86','win-arm64')) {
+            dotnet publish winstall.csproj -c Release -f net8.0-windows -r $rid --self-contained true `
+              /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:DebugType=none `
+              /p:Version=$env:VERSION --nologo -v q -o "dist\$rid"
+            Compress-Archive -Path "dist\$rid\*" `
+              -DestinationPath "release-pkg\winstall-portable-$rid.zip" -Force
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist-installer -Force
+          foreach ($a in @(@{arch='x64'; src='win-x64'}, @{arch='x86'; src='win-x86'}, @{arch='arm64'; src='win-arm64'})) {
+            & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /DMyArch=$($a.arch) /DMyVersion=$env:VERSION `
+              /DSrcDir="..\dist\$($a.src)" /DOutDir="..\dist-installer" installer\winstall.iss
+          }
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME --generate-notes `
+            dist-installer/Setup-winstall-*.exe `
+            release-pkg/winstall-portable-*.zip

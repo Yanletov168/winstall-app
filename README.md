@@ -28,11 +28,25 @@
 Целевая платформа: **Windows 10 IoT Enterprise LTSC 21H2**, работает из коробки
 на встроенном .NET Framework 4.8.
 
-## Быстрый старт (portable)
+## Быстрый старт
 
-1. Забери `winstall.exe` и папку `locales` из
-   [Releases](https://github.com/Yanletov168/winstall-app/releases).
-2. Положи рядом, запусти. Всё.
+Файлы лежат в [Releases](https://github.com/Yanletov168/winstall-app/releases)
+(исходники каждого релиза GitHub прикладывает сам: `Source code (zip)`).
+
+| Файл | Для кого |
+|---|---|
+| `Setup-winstall-x64.exe` | Установщик, Windows 10/11 64-bit |
+| `Setup-winstall-x86.exe` | Установщик, Windows 32-bit |
+| `Setup-winstall-arm64.exe` | Установщик, Windows ARM64 (нативно) |
+| `winstall-portable-net48.zip` | Portable для LTSC без рантаймов (~100 КБ: exe + переводы) |
+| `winstall-portable-win-x64.zip` | Portable .NET 8 self-contained, 64-bit |
+| `winstall-portable-win-x86.zip` | Portable .NET 8 self-contained, 32-bit |
+| `winstall-portable-win-arm64.zip` | Portable .NET 8 self-contained, ARM64 |
+
+Установщики per-user (без UAC): кладут программу, ярлык в меню Пуск,
+деинсталлятор в «Программы и компоненты». Нативного ARM64 у .NET Framework 4.8
+не бывает — ARM64-сборки едут на .NET 8 self-contained (рантайм внутри,
+ставить ничего не надо).
 
 > На IoT LTSC нет Store и winget по умолчанию: скачай `.msixbundle` со страницы
 > [winget-cli/releases](https://github.com/microsoft/winget-cli/releases)

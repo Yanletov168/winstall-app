@@ -9,6 +9,11 @@ TestResults/
 # Сборка portable (генерируется локально, в релизы — через GitHub Releases)
 portable/
 
+# Локальные сборочные каталоги релизов (генерируются, в репо не едут)
+dist/
+dist-installer/
+release-pkg/
+
 # Локальные пользовательские файлы
 language.txt
 locales/*-local.json
