@@ -144,13 +144,22 @@ class P {
             Options.WingetPath = self;
             Options.LogsDir = bdir;
             Options.Silent = false;
+            Options.Flags = "--include-unknown --nowarn";
             Options.Save();
             Options.Reset();
             Check("options roundtrip", Options.Language == "ru" && Options.WingetPath == self
-                && Options.LogsDir == bdir && !Options.Silent);
+                && Options.LogsDir == bdir && !Options.Silent && Options.Flags == "--include-unknown --nowarn");
             // Stale winget path is kept verbatim (existence is checked by Backend, not here).
             Options.WingetPath = @"Z:\definitely\not\here\winget.exe";
             Check("options keeps stale path", Options.WingetPath.EndsWith("winget.exe"));
+            Options.Flags = "--include-unknown --nowarn";
+            Check("flags appended",
+                WingetRunner.WithUserFlags("upgrade") == "upgrade --include-unknown --nowarn");
+            Options.Flags = "--proxy http://127.0.0.1:8080";
+            Check("flags keep values",
+                WingetRunner.WithUserFlags("install --id X") == "install --id X --proxy http://127.0.0.1:8080");
+            Options.Flags = "";
+            Check("empty flags untouched", WingetRunner.WithUserFlags("list") == "list");
             // Legacy migration: no options.ini, old language.txt present.
             System.IO.File.Delete(System.IO.Path.Combine(bdir, "options.ini"));
             System.IO.File.WriteAllText(System.IO.Path.Combine(bdir, "language.txt"), "ru");

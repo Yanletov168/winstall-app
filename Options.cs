@@ -20,6 +20,7 @@ namespace winstall
         private static string wingetPath = "";
         private static string logsDir = "";
         private static bool silent = true;
+        private static string flags = "";
 
         // "" = follow the OS language.
         public static string Language
@@ -48,6 +49,14 @@ namespace winstall
             set { EnsureLoaded(); silent = value; }
         }
 
+        // Free-form flags appended to every winget call (e.g. --include-unknown --nowarn).
+        // Base flags stay as built; quoting follows normal command-line rules.
+        public static string Flags
+        {
+            get { EnsureLoaded(); return flags; }
+            set { EnsureLoaded(); flags = (value ?? "").Trim(); }
+        }
+
         public static void EnsureLoaded()
         {
             if (loaded) return;
@@ -62,18 +71,19 @@ namespace winstall
             wingetPath = "";
             logsDir = "";
             silent = true;
+            flags = "";
         }
 
         public static void Save()
         {
             EnsureLoaded();
             var sb = new StringBuilder();
-            sb.AppendLine("; winstall options. Safe to edit by hand while the app is closed.");
             sb.AppendLine("[winstall]");
             sb.AppendLine("language=" + language);
             sb.AppendLine("winget_path=" + wingetPath);
             sb.AppendLine("logs_dir=" + logsDir);
             sb.AppendLine("silent=" + (silent ? "true" : "false"));
+            sb.AppendLine("flags=" + flags);
             foreach (var p in ConfigFiles())
             {
                 try
@@ -118,6 +128,7 @@ namespace winstall
             if (map.TryGetValue("logs_dir", out v)) logsDir = v.Trim();
             if (map.TryGetValue("silent", out v))
                 silent = v.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+            if (map.TryGetValue("flags", out v)) flags = v.Trim();
             if (language == "") ImportLegacyLanguage();
         }
 

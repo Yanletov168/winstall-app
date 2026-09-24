@@ -97,6 +97,8 @@ supported way to get WinGet on a machine that lacks it.
 - Settings live in `options.ini` next to the exe (UI language, cached backend
   path, installer log folder, silent mode). The ☰ menu edits language, log
   folder and silent mode; the backend entry is maintained automatically.
+- Power flags: `flags = --include-unknown --nowarn` in `options.ini` is
+  appended to every winget call; base flags stay as built.
 
 ## Building from source
 

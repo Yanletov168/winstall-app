@@ -96,6 +96,7 @@ namespace winstall
 
         public static Task<WingetResult> RunAsync(string args, int timeoutMs = DefaultTimeoutMs)
         {
+            args = WithUserFlags(args);
             return Task.Run(() =>
             {
                 string exe = Backend.ResolveExe() ?? "winget";
@@ -110,6 +111,13 @@ namespace winstall
                     return RunOnce(Backend.ResolveExe() ?? "winget", args, timeoutMs);
                 }
             });
+        }
+
+        internal static string WithUserFlags(string args)
+        {
+            string f = Options.Flags;
+            if (string.IsNullOrWhiteSpace(f)) return args;
+            return args + " " + f.Trim();
         }
 
         private static WingetResult RunOnce(string exe, string args, int timeoutMs)
