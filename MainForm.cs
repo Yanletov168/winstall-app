@@ -271,14 +271,6 @@ namespace winstall
             mAuto.Checked = autoCheckEnabled;
             mAuto.Click += delegate { ToggleAutoCheck(); };
             hamburger.Items.Add(mAuto);
-            var mSilent = new ToolStripMenuItem(L.T("menu_silent"));
-            mSilent.Checked = Options.Silent;
-            mSilent.Click += delegate
-            {
-                Options.Silent = !Options.Silent;
-                Options.Save();
-            };
-            hamburger.Items.Add(mSilent);
             hamburger.Items.Add(new ToolStripSeparator());
             hamburger.Items.Add(L.T("menu_logs"), null, delegate { OpenWingetLogs(); });
             var mLogsDir = new ToolStripMenuItem(L.T("menu_logsdir"));
@@ -806,7 +798,7 @@ namespace winstall
 
             lblStatus.Text = L.F("status_removing", pkg.DisplayName);
             var u = await WingetRunner.RunAsync(
-                WingetRunner.BuildArgs("uninstall", pkg, Options.LogsDir, Options.Silent),
+                WingetRunner.BuildArgs("uninstall", pkg),
                 WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             if (u.ExitCode != 0 && !string.IsNullOrWhiteSpace(pkg.UpgradeId))
             {
@@ -815,7 +807,7 @@ namespace winstall
                 alt.Id = pkg.UpgradeId;
                 alt.Name = pkg.Name;
                 u = await WingetRunner.RunAsync(
-                    WingetRunner.BuildArgs("uninstall", alt, Options.LogsDir, Options.Silent),
+                    WingetRunner.BuildArgs("uninstall", alt),
                     WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             }
             if (u.ExitCode != 0)
@@ -833,7 +825,7 @@ namespace winstall
             ins.Id = pkg.EffectiveUpgradeId;
             ins.Name = pkg.Name;
             var ir = await WingetRunner.RunAsync(
-                WingetRunner.BuildArgs("install", ins, Options.LogsDir, Options.Silent),
+                WingetRunner.BuildArgs("install", ins),
                 WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             bool good = ir.ExitCode == 0;
             log.AppendLine(L.F("log_reinstall", good ? "OK" : "FAIL", pkg.DisplayName, ir.ExitCode));
@@ -880,7 +872,7 @@ namespace winstall
                     string verb = job.Value == PendingAction.Install ? "install" :
                                   job.Value == PendingAction.Upgrade ? "upgrade" : "uninstall";
                     lblStatus.Text = string.Format("{0}: {1}…", PackageInfo.ActionText(job.Value), pkg.DisplayName);
-                    string args = WingetRunner.BuildArgs(verb, pkg, Options.LogsDir, Options.Silent);
+                    string args = WingetRunner.BuildArgs(verb, pkg);
                     var r = await WingetRunner.RunAsync(args, WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
                     bool good = r.ExitCode == 0;
                     if (!good && job.Value == PendingAction.Upgrade && IsTechnologyDiffers(r))
@@ -944,9 +936,7 @@ namespace winstall
             try
             {
                 // One call upgrades everything; cheaper than per-package runs.
-                string silent = Options.Silent ? " --silent" : "";
-                string args = "upgrade --all --accept-package-agreements --accept-source-agreements --disable-interactivity"
-                    + silent + WingetRunner.BuildLogArg("upgrade", "all", Options.LogsDir);
+                string args = WingetRunner.BuildUpgradeAllArgs();
                 var r = await WingetRunner.RunAsync(args, WingetRunner.BulkTimeoutMs).ConfigureAwait(true);
                 bool good = r.ExitCode == 0;
                 string tail = (r.StdOut + "\n" + r.StdErr).Trim();

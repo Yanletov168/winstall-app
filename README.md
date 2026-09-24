@@ -95,10 +95,13 @@ supported way to get WinGet on a machine that lacks it.
 - `winstall.exe --check-updates` is the quiet mode used by the checker:
   no window, balloon on updates, silent exit otherwise.
 - Settings live in `options.ini` next to the exe (UI language, cached backend
-  path, installer log folder, silent mode). The ☰ menu edits language, log
-  folder and silent mode; the backend entry is maintained automatically.
-- Power flags: `flags = --include-unknown --nowarn` in `options.ini` is
-  appended to every winget call; base flags stay as built.
+  path, installer log folder, per-verb flags). The ☰ menu edits language and
+  log folder; the backend entry is maintained automatically.
+- Policy flags are centralized, one set per verb, no hidden defaults:
+  `upd_flags` (upgrade), `add_flags` (install), `rem_flags` (uninstall).
+  Example: `upd_flags = --accept-package-agreements --accept-source-agreements --disable-interactivity --silent --include-unknown`.
+  Read-only queries keep a fixed non-interactive pair so fresh machines don't
+  hang on prompts.
 
 ## Building from source
 

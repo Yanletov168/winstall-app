@@ -296,7 +296,7 @@ namespace winstall
             embeddedEn["msg_reinstall"] = "{0}: winget reports that the installer technology\ndiffers from the installed version, so a direct\nupdate is impossible.\n\nRemove the package and install the new version?";
             embeddedEn["msg_no_updates"] = "No updates \u2014 everything is fresh.";
             embeddedEn["msg_upd_all_t"] = "Update all";
-            embeddedEn["msg_upd_all_q"] = "Update all {0} package(s)?\n\nSame as `winget upgrade --all --silent`.";
+            embeddedEn["msg_upd_all_q"] = "Update all {0} package(s)?\n\nSame as `winget upgrade --all` (flags come from upd_flags).";
             embeddedEn["msg_upd_all_done"] = "Done.";
             embeddedEn["msg_upd_all_code"] = "Finished with code {0}.";
             embeddedEn["dlg_filter"] = "Winget JSON (*.json)|*.json|All files (*.*)|*.*";
@@ -315,7 +315,6 @@ namespace winstall
             embeddedEn["act_uninstall"] = "uninstall";
             embeddedEn["act_none"] = "";
             embeddedEn["menu_autocheck"] = "Auto-check for updates";
-            embeddedEn["menu_silent"] = "Silent install";
             embeddedEn["msg_auto_on_t"] = "Auto-check";
             embeddedEn["msg_auto_on"] = "Enabled, no admin rights needed:\n\u2022 autostart at logon (HKCU Run key),\n\u2022 check on wake (the \\winstall\\winstall-wake task).\n\nwinstall will quietly check for updates and show a notification with the count.";
             embeddedEn["msg_auto_off_t"] = "Auto-check";

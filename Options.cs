@@ -8,19 +8,31 @@ namespace winstall
     /// <summary>
     /// Single configuration file (options.ini next to the exe, AppData fallback).
     /// Owns the UI language (migrated from the legacy language.txt), the cached
-    /// winget location, the custom installer-log directory and the silent mode.
-    /// Safe to edit by hand while the app is closed.
+    /// winget location, the custom installer-log directory and the per-verb
+    /// flag sets. There are no hidden flags: what runs is exactly
+    /// "winget {verb} --id ... {per-verb set}". Safe to edit by hand
+    /// while the app is closed.
     /// </summary>
     public static class Options
     {
+        public const string DefaultUpdFlags =
+            "--accept-package-agreements --accept-source-agreements --disable-interactivity --silent";
+        public const string DefaultAddFlags =
+            "--accept-package-agreements --accept-source-agreements --disable-interactivity --silent";
+        // uninstall has no --accept-package-agreements: passing it makes winget
+        // print usage and exit 0x8A150002, hence the separate default.
+        public const string DefaultRemFlags =
+            "--accept-source-agreements --disable-interactivity --silent";
+
         internal static string DirOverride { get; set; }
 
         private static bool loaded;
         private static string language = "";
         private static string wingetPath = "";
         private static string logsDir = "";
-        private static bool silent = true;
-        private static string flags = "";
+        private static string updFlags = DefaultUpdFlags;
+        private static string addFlags = DefaultAddFlags;
+        private static string remFlags = DefaultRemFlags;
 
         // "" = follow the OS language.
         public static string Language
@@ -43,18 +55,24 @@ namespace winstall
             set { EnsureLoaded(); logsDir = (value ?? "").Trim(); }
         }
 
-        public static bool Silent
+        // One flag set per mutating verb. Empty means "bare winget call"
+        // (note: without --disable-interactivity winget may prompt and hang).
+        public static string UpdFlags
         {
-            get { EnsureLoaded(); return silent; }
-            set { EnsureLoaded(); silent = value; }
+            get { EnsureLoaded(); return updFlags; }
+            set { EnsureLoaded(); updFlags = (value ?? "").Trim(); }
         }
 
-        // Free-form flags appended to every winget call (e.g. --include-unknown --nowarn).
-        // Base flags stay as built; quoting follows normal command-line rules.
-        public static string Flags
+        public static string AddFlags
         {
-            get { EnsureLoaded(); return flags; }
-            set { EnsureLoaded(); flags = (value ?? "").Trim(); }
+            get { EnsureLoaded(); return addFlags; }
+            set { EnsureLoaded(); addFlags = (value ?? "").Trim(); }
+        }
+
+        public static string RemFlags
+        {
+            get { EnsureLoaded(); return remFlags; }
+            set { EnsureLoaded(); remFlags = (value ?? "").Trim(); }
         }
 
         public static void EnsureLoaded()
@@ -70,8 +88,9 @@ namespace winstall
             language = "";
             wingetPath = "";
             logsDir = "";
-            silent = true;
-            flags = "";
+            updFlags = DefaultUpdFlags;
+            addFlags = DefaultAddFlags;
+            remFlags = DefaultRemFlags;
         }
 
         public static void Save()
@@ -82,8 +101,9 @@ namespace winstall
             sb.AppendLine("language=" + language);
             sb.AppendLine("winget_path=" + wingetPath);
             sb.AppendLine("logs_dir=" + logsDir);
-            sb.AppendLine("silent=" + (silent ? "true" : "false"));
-            sb.AppendLine("flags=" + flags);
+            sb.AppendLine("upd_flags=" + updFlags);
+            sb.AppendLine("add_flags=" + addFlags);
+            sb.AppendLine("rem_flags=" + remFlags);
             foreach (var p in ConfigFiles())
             {
                 try
@@ -126,9 +146,9 @@ namespace winstall
             if (map.TryGetValue("language", out v)) language = v.Trim();
             if (map.TryGetValue("winget_path", out v)) wingetPath = v.Trim();
             if (map.TryGetValue("logs_dir", out v)) logsDir = v.Trim();
-            if (map.TryGetValue("silent", out v))
-                silent = v.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
-            if (map.TryGetValue("flags", out v)) flags = v.Trim();
+            if (map.TryGetValue("upd_flags", out v)) updFlags = v.Trim();
+            if (map.TryGetValue("add_flags", out v)) addFlags = v.Trim();
+            if (map.TryGetValue("rem_flags", out v)) remFlags = v.Trim();
             if (language == "") ImportLegacyLanguage();
         }
 

@@ -106,16 +106,48 @@ class P {
         Check("fallback unknown key", L.T("no_such_key_xyz") == "no_such_key_xyz");
         Check("embedded fallback act", new PackageInfo().ActionFor(true) == PendingAction.Install && PackageInfo.ActionText(PendingAction.Upgrade) == "upgrade");
 
-        // Per-verb flags: uninstall has no --accept-package-agreements (winget prints usage, 0x8A150002).
-        var bp = new PackageInfo();
-        bp.Id = "LLVM.LLVM";
-        Check("uninstall has no package-agreements", !WingetRunner.BuildArgs("uninstall", bp).Contains("accept-package"));
-        Check("uninstall has silent", WingetRunner.BuildArgs("uninstall", bp).Contains("--silent"));
-        Check("install has package-agreements", WingetRunner.BuildArgs("install", bp).Contains("accept-package-agreements"));
-        Check("upgrade has package-agreements", WingetRunner.BuildArgs("upgrade", bp).Contains("accept-package-agreements"));
-        var bp2 = new PackageInfo();
-        bp2.Id = "ARP\\Machine\\X64\\LLVM"; bp2.UpgradeId = "LLVM.LLVM";
-        Check("upgrade uses UpgradeId", WingetRunner.BuildArgs("upgrade", bp2).Contains("LLVM.LLVM") && !WingetRunner.BuildArgs("upgrade", bp2).Contains("ARP"));
+        // Per-verb flag sets, centralized in options (no implicit flags).
+        // Isolated config so a real options.ini can never leak into expectations.
+        string fdir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "winstall-flags-" + System.Guid.NewGuid().ToString("N"));
+        Options.DirOverride = fdir;
+        try
+        {
+            Options.Reset();
+            var bp = new PackageInfo();
+            bp.Id = "LLVM.LLVM";
+            Check("upgrade defaults",
+                WingetRunner.BuildArgs("upgrade", bp) == "upgrade --id \"LLVM.LLVM\" " + Options.DefaultUpdFlags);
+            Check("uninstall defaults without package-agreements",
+                WingetRunner.BuildArgs("uninstall", bp) == "uninstall --id \"LLVM.LLVM\" " + Options.DefaultRemFlags
+                && !WingetRunner.BuildArgs("uninstall", bp).Contains("accept-package"));
+            var bp2 = new PackageInfo();
+            bp2.Id = "ARP\\Machine\\X64\\LLVM"; bp2.UpgradeId = "LLVM.LLVM";
+            Check("upgrade uses UpgradeId", WingetRunner.BuildArgs("upgrade", bp2).Contains("LLVM.LLVM") && !WingetRunner.BuildArgs("upgrade", bp2).Contains("ARP"));
+            Options.UpdFlags = "--include-unknown";
+            Check("custom upd wins",
+                WingetRunner.BuildArgs("upgrade", bp) == "upgrade --id \"LLVM.LLVM\" --include-unknown");
+            Check("add untouched by upd",
+                WingetRunner.BuildArgs("install", bp).Contains("--silent"));
+            Options.RemFlags = "";
+            Check("empty rem set",
+                WingetRunner.BuildArgs("uninstall", bp) == "uninstall --id \"LLVM.LLVM\"");
+            Check("upgrade-all uses upd",
+                WingetRunner.BuildUpgradeAllArgs() == "upgrade --all --include-unknown");
+            // --log file wiring (winget takes a file path, not a directory).
+            var bp3 = new PackageInfo();
+            bp3.Id = "Valve.Steam";
+            Options.LogsDir = fdir;
+            string withLog = WingetRunner.BuildArgs("install", bp3);
+            Check("log flag wired", withLog.Contains("--log \"" + fdir + "\\winstall-install-Valve.Steam-"));
+            Options.LogsDir = "";
+            Check("no log without dir", !WingetRunner.BuildArgs("install", bp3).Contains("--log"));
+        }
+        finally
+        {
+            Options.DirOverride = null;
+            Options.Reset();
+            try { System.IO.Directory.Delete(fdir, true); } catch { }
+        }
 
         // WINSTALL_WINGET override replaces detection entirely ("none" forces "no backend").
         System.Environment.SetEnvironmentVariable("WINSTALL_WINGET", @"Z:\custom\winget.exe");
@@ -138,28 +170,23 @@ class P {
         {
             Options.Reset();
             Check("options defaults", Options.Language == "" && Options.WingetPath == ""
-                && Options.LogsDir == "" && Options.Silent);
+                && Options.LogsDir == "" && Options.UpdFlags == Options.DefaultUpdFlags
+                && Options.AddFlags == Options.DefaultAddFlags && Options.RemFlags == Options.DefaultRemFlags);
             string self = System.Reflection.Assembly.GetExecutingAssembly().Location;
             Options.Language = "ru";
             Options.WingetPath = self;
             Options.LogsDir = bdir;
-            Options.Silent = false;
-            Options.Flags = "--include-unknown --nowarn";
+            Options.UpdFlags = "--include-unknown";
+            Options.AddFlags = "";
+            Options.RemFlags = "--silent";
             Options.Save();
             Options.Reset();
             Check("options roundtrip", Options.Language == "ru" && Options.WingetPath == self
-                && Options.LogsDir == bdir && !Options.Silent && Options.Flags == "--include-unknown --nowarn");
+                && Options.LogsDir == bdir && Options.UpdFlags == "--include-unknown"
+                && Options.AddFlags == "" && Options.RemFlags == "--silent");
             // Stale winget path is kept verbatim (existence is checked by Backend, not here).
             Options.WingetPath = @"Z:\definitely\not\here\winget.exe";
             Check("options keeps stale path", Options.WingetPath.EndsWith("winget.exe"));
-            Options.Flags = "--include-unknown --nowarn";
-            Check("flags appended",
-                WingetRunner.WithUserFlags("upgrade") == "upgrade --include-unknown --nowarn");
-            Options.Flags = "--proxy http://127.0.0.1:8080";
-            Check("flags keep values",
-                WingetRunner.WithUserFlags("install --id X") == "install --id X --proxy http://127.0.0.1:8080");
-            Options.Flags = "";
-            Check("empty flags untouched", WingetRunner.WithUserFlags("list") == "list");
             // Legacy migration: no options.ini, old language.txt present.
             System.IO.File.Delete(System.IO.Path.Combine(bdir, "options.ini"));
             System.IO.File.WriteAllText(System.IO.Path.Combine(bdir, "language.txt"), "ru");
@@ -174,15 +201,6 @@ class P {
             try { System.IO.Directory.Delete(bdir, true); } catch { }
         }
 
-        // --log file wiring and silent toggle.
-        var bp3 = new PackageInfo();
-        bp3.Id = "Valve.Steam";
-        string withLog = WingetRunner.BuildArgs("install", bp3, @"C:\logs", true);
-        Check("log flag wired", withLog.Contains("--log \"C:\\logs\\winstall-install-Valve.Steam-"));
-        Check("no log without dir", !WingetRunner.BuildArgs("install", bp3, "", true).Contains("--log"));
-        Check("no log when null", !WingetRunner.BuildArgs("install", bp3, null, true).Contains("--log"));
-        Check("non-silent omits flag", !WingetRunner.BuildArgs("install", bp3, null, false).Contains("--silent"));
-        Check("silent default kept", WingetRunner.BuildArgs("install", bp3).Contains("--silent"));
         // Live backend resolve: sane result plus cache file (tolerates machines without winget).
         string bdir2 = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "winstall-test2-" + System.Guid.NewGuid().ToString("N"));
         Options.DirOverride = bdir2;

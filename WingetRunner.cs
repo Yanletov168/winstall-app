@@ -96,7 +96,6 @@ namespace winstall
 
         public static Task<WingetResult> RunAsync(string args, int timeoutMs = DefaultTimeoutMs)
         {
-            args = WithUserFlags(args);
             return Task.Run(() =>
             {
                 string exe = Backend.ResolveExe() ?? "winget";
@@ -111,13 +110,6 @@ namespace winstall
                     return RunOnce(Backend.ResolveExe() ?? "winget", args, timeoutMs);
                 }
             });
-        }
-
-        internal static string WithUserFlags(string args)
-        {
-            string f = Options.Flags;
-            if (string.IsNullOrWhiteSpace(f)) return args;
-            return args + " " + f.Trim();
         }
 
         private static WingetResult RunOnce(string exe, string args, int timeoutMs)
@@ -354,32 +346,30 @@ namespace winstall
         }
 
         /// <summary>
-        /// Builds the winget command line. logDir (when set) redirects the installer
-        /// log to a per-operation file inside it; silent=false leaves the installer
-        /// UI at its defaults instead of forcing --silent.
+        /// Builds the winget command line from the centralized per-verb flag sets
+        /// (Options.UpdFlags/AddFlags/RemFlags). Only --id is structural; everything
+        /// else comes from options.ini. A configured logs_dir adds a per-operation
+        /// --log file (winget takes a file path, not a directory).
         /// </summary>
-        public static string BuildArgs(string verb, PackageInfo pkg, string logDir, bool silent)
-        {
-            // ARP rows upgrade by the linked winget id (see UpgradeId).
-            string useId = verb == "upgrade" ? pkg.EffectiveUpgradeId : pkg.Id;
-            string idQ = "\"" + useId.Replace("\"", "") + "\"";
-            string common = "--id " + idQ + " --accept-source-agreements --disable-interactivity ";
-            string mode = silent ? "--silent" : "";
-            string log = BuildLogArg(verb, useId, logDir);
-            switch (verb)
-            {
-                // NOTE: uninstall has no --accept-package-agreements. Passing it makes
-                // winget print usage and exit 0x8A150002. install/upgrade keep the flag.
-                case "install": return ("install " + common + "--accept-package-agreements " + mode + log).TrimEnd();
-                case "upgrade": return ("upgrade " + common + "--accept-package-agreements " + mode + log).TrimEnd();
-                case "uninstall": return ("uninstall " + common + mode + log).TrimEnd();
-                default: return (verb + " " + common + log).TrimEnd();
-            }
-        }
-
         public static string BuildArgs(string verb, PackageInfo pkg)
         {
-            return BuildArgs(verb, pkg, null, true);
+            string useId = verb == "upgrade" ? pkg.EffectiveUpgradeId : pkg.Id;
+            string args = verb + " --id \"" + useId.Replace("\"", "") + "\"";
+            string flags = "";
+            if (verb == "install") flags = Options.AddFlags;
+            else if (verb == "upgrade") flags = Options.UpdFlags;
+            else if (verb == "uninstall") flags = Options.RemFlags;
+            if (!string.IsNullOrWhiteSpace(flags)) args += " " + flags.Trim();
+            args += BuildLogArg(verb, useId, Options.LogsDir);
+            return args;
+        }
+
+        public static string BuildUpgradeAllArgs()
+        {
+            string args = "upgrade --all";
+            if (!string.IsNullOrWhiteSpace(Options.UpdFlags)) args += " " + Options.UpdFlags.Trim();
+            args += BuildLogArg("upgrade", "all", Options.LogsDir);
+            return args;
         }
 
         internal static string BuildLogArg(string verb, string id, string logDir)
