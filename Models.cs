@@ -1,14 +1,14 @@
 namespace winstall
 {
     /// <summary>
-    /// Что сделает галочка в стиле MInstall.
+    /// What checking the box does, MInstall-style.
     /// </summary>
     public enum PendingAction
     {
         None,
-        Install,   // пакет не установлен -> установить
-        Upgrade,   // установлен и есть обновление -> обновить
-        Uninstall  // установлен и свежий -> удалить
+        Install,   // Not installed -> install it.
+        Upgrade,   // Installed with an update -> upgrade it.
+        Uninstall  // Installed and current -> remove it.
     }
 
     public class PackageInfo
@@ -21,14 +21,13 @@ namespace winstall
         public bool IsInstalled;
         public bool HasUpdate;
         /// <summary>
-        /// Настоящий winget-Id для обновления. Заполняется, когда программа
-        /// ставилась мимо winget (в list видна как ARP\... с пустым Source),
-        /// а в `winget upgrade` она же фигурирует под нормальным Id
-        /// (например Valve.Steam). Тогда обновляем именно по нему.
+        /// Real winget id for upgrades. Set when the app was side-loaded
+        /// (shows as ARP\... with an empty source in list) while
+        /// `winget upgrade` knows it under its regular id (e.g. Valve.Steam).
         /// </summary>
         public string UpgradeId = "";
 
-        /// <summary>ARP-запись: установлено не через winget.</summary>
+        /// <summary>ARP entry: installed outside winget.</summary>
         public bool IsArp
         {
             get
@@ -38,15 +37,14 @@ namespace winstall
             }
         }
 
-        /// <summary>Id, который надо передавать в `winget upgrade --id`.</summary>
+        /// <summary>Id to pass to winget upgrade --id.</summary>
         public string EffectiveUpgradeId
         {
             get { return !string.IsNullOrWhiteSpace(UpgradeId) ? UpgradeId : Id; }
         }
 
         /// <summary>
-        /// "Нативное" отображаемое имя: колонка Name из winget,
-        /// а не голый Id вида Valve.Steam.
+        /// Display name: winget's Name column rather than a bare id (Steam, not Valve.Steam).
         /// </summary>
         public string DisplayName
         {

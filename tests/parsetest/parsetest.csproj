@@ -11,7 +11,7 @@
     <RootNamespace>parsetest</RootNamespace>
   </PropertyGroup>
 
-  <!-- Тестируем исходники основного проекта напрямую, без копий -->
+  <!-- The tests compile the real sources directly, no copies. -->
   <ItemGroup>
     <Compile Include="..\..\Models.cs" Link="Src\Models.cs" />
     <Compile Include="..\..\WingetRunner.cs" Link="Src\WingetRunner.cs" />

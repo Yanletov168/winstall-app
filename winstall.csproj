@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <!-- net48: крошечный exe для LTSC без рантаймов; net8.0-windows: self-contained под x64/x86/arm64 -->
+    <!-- net48: tiny exe for LTSC with no runtime to install; net8.0-windows: self-contained x64/x86/arm64 -->
     <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>disable</Nullable>
@@ -12,18 +12,18 @@
     <RootNamespace>winstall</RootNamespace>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <Version>1.1.0</Version>
-    <!-- Чистый Win32-вид, без лишних зависимостей. Собирается на VS2019+ / BuildTools. -->
-    <!-- На Windows 10 IoT Enterprise LTSC 21H2 работает из коробки (.NET Framework 4.8 встроен). -->
+    <!-- Plain Win32 look, no extra dependencies. Builds with VS2019+ / BuildTools. -->
+    <!-- Runs out of the box on Windows 10 IoT Enterprise LTSC 21H2 (in-box .NET Framework 4.8). -->
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Чтобы net48 собирался SDK 8 без установленной VS -->
+    <!-- Lets SDK 8 target net48 without a VS install. -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'" />
-    <!-- Файлы локализации едут рядом с exe -->
+    <!-- Locale files ship next to the exe. -->
     <Content Include="locales\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <!-- Тесты и portable-артефакты — не часть сборки -->
+    <!-- Tests and portable artifacts are not part of the build. -->
     <Compile Remove="tests\**" />
     <EmbeddedResource Remove="tests\**" />
     <Content Remove="tests\**" />

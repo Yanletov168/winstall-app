@@ -10,16 +10,15 @@ using System.Windows.Forms;
 namespace winstall
 {
     /// <summary>
-    /// Интерфейс в духе MInstall: сверху выпадашка категорий + «Выполнить»,
-    /// один список «галочка — иконка — имя — версия — значок действия»,
-    /// внизу поиск + счётчик + «Выбрать все / Ничего / Обновляемые»
-    /// и панель описания выбранной программы.
-    /// Язык интерфейса — из файлов locales/*.json рядом с программой,
-    /// выбор через меню ☰. Без файлов работает встроенный английский.
+    /// MInstall-style main window: category dropdown + Run button on top, a single
+    /// checklist (icon, name, version, action glyph) in the middle, search + counter
+    /// + bulk buttons and a details pane at the bottom. The UI language comes from
+    /// locales/*.json next to the executable (hamburger menu); embedded English
+    /// is used when no files are found.
     /// </summary>
     public class MainForm : Form
     {
-        // Cue-banner (серый hint) для поля поиска на Win32
+        // Gray cue banner for the search box (EM_SETCUEBANNER).
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int SendMessage(IntPtr hWnd, int msg, int wParam, string lParam);
         private const int EM_SETCUEBANNER = 0x1501;
@@ -46,10 +45,8 @@ namespace winstall
         private Timer searchTimer;
         private IconProvider icons;
 
-        // Полные данные
         private List<PackageInfo> installed = new List<PackageInfo>();
-        private List<PackageInfo> searchBase; // null = поиска нет, показываем установленные
-        private List<PackageInfo> shown = new List<PackageInfo>();
+        private List<PackageInfo> searchBase; // Null when no search is active; the installed list shows then.
         private bool busy;
         private bool syncing;
         private bool changingView;
@@ -59,7 +56,7 @@ namespace winstall
         {
             L.Startup();
             Text = L.T("app_title");
-            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
             catch { }
             StartPosition = FormStartPosition.CenterScreen;
             Size = new Size(900, 620);
@@ -68,7 +65,7 @@ namespace winstall
 
             icons = new IconProvider();
             BuildUi();
-            // Состояние автопроверки читаем в фоне, чтобы не тормозить старт.
+            // Resolve the auto-check state off the UI thread to keep startup snappy.
             Task.Run(delegate { autoCheckEnabled = AutoCheck.IsEnabled(); });
 
             searchTimer = new Timer();
@@ -81,7 +78,7 @@ namespace winstall
 
         private void BuildUi()
         {
-            // --- Верх: выпадашка категорий + Выполнить (как в MInstall) ---
+            // Top bar: category dropdown + Run.
             var top = new Panel();
             top.Dock = DockStyle.Top;
             top.Height = 34;
@@ -135,9 +132,9 @@ namespace winstall
 
             hamburger = new ContextMenuStrip();
             BuildHamburger();
-            // Перед показом пересканируем папку locales — вдруг файл только что положили.
+            // Rescan locales before showing the menu so freshly dropped files appear.
             hamburger.Opening += delegate { L.Rescan(); BuildHamburger(); };
-            // --- Низ: строка поиска + счётчик + массовые кнопки ---
+            // Bottom bar: search row, counter, bulk actions.
             var bottom = new Panel();
             bottom.Dock = DockStyle.Bottom;
             bottom.Height = 118;
@@ -147,9 +144,8 @@ namespace winstall
             searchRow.Dock = DockStyle.Top;
             searchRow.Height = 30;
             searchRow.Padding = new Padding(6, 4, 4, 2);
-            // НЕ добавляем searchRow сейчас: в WinForms последний добавленный
-            // докируется первым, поэтому Fill (описание) добавляем раньше,
-            // а Top (строка поиска) — позже. См. bottom.Controls.Add ниже.
+            // The search row is added later: WinForms docks the last-added control first,
+            // so the Fill pane goes in before the Top row. See bottom.Controls.Add below.
 
             var lblFind = new Label();
             lblFind.Text = "🔍";
@@ -200,12 +196,11 @@ namespace winstall
                 searchTimer.Start();
             };
             searchRow.Controls.Add(txtSearch);
-            // Fill делим последним: иначе поле растянется на всю ширину
-            // под кнопками и текст уползёт.
+            // Dock the Fill control last, otherwise it stretches underneath the buttons.
             searchRow.Controls.SetChildIndex(txtSearch, 0);
             SendMessage(txtSearch.Handle, EM_SETCUEBANNER, 0, L.T("search_cue"));
 
-            // --- Панель описания выбранной программы (как в MInstall) ---
+            // Details pane for the selected package.
             txtDesc = new TextBox();
             txtDesc.Dock = DockStyle.Fill;
             txtDesc.Multiline = true;
@@ -215,11 +210,10 @@ namespace winstall
             txtDesc.ForeColor = SystemColors.GrayText;
             txtDesc.Text = L.T("desc_legend");
             bottom.Controls.Add(txtDesc);
-            // Строку поиска добавляем ПОСЛЕ описания: последний добавленный
-            // докируется первым, Top должен делиться раньше Fill.
+            // The search row goes in after the details pane so Top docks before Fill.
             bottom.Controls.Add(searchRow);
 
-            // --- Список: один, как в MInstall ---
+            // Single list.
             lv = new ListView();
             lv.Dock = DockStyle.Fill;
             lv.View = View.Details;
@@ -294,7 +288,7 @@ namespace winstall
             hamburger.Items.Add(L.T("menu_exit"), null, delegate { Close(); });
         }
 
-        /// <summary>Применить текущий язык ко всем надписям без потери галочек.</summary>
+        /// <summary>Retranslates the UI, preserving checked rows.</summary>
         private void ApplyLanguage()
         {
             var keep = new HashSet<PackageInfo>();
@@ -321,7 +315,7 @@ namespace winstall
             SendMessage(txtSearch.Handle, EM_SETCUEBANNER, 0, L.T("search_cue"));
             UpdateUpgradeAllButton();
             BuildHamburger();
-            ApplyFilter(); // перерисует (галочки слетят) — вернём ниже
+            ApplyFilter(); // Rebuilds rows and clears checks; restored below.
             lv.ItemChecked -= Lv_ItemChecked;
             try
             {
@@ -356,7 +350,7 @@ namespace winstall
             btnUpgradeAll.Enabled = !b && HasAnyUpdate();
             btnMenu.Enabled = !b;
             cmbView.Enabled = !b;
-            // Поле поиска не блокируем — текст можно править даже во время операции.
+            // The search box stays editable during operations.
             if (text != null) lblStatus.Text = text;
             Cursor = b ? Cursors.WaitCursor : Cursors.Default;
         }
@@ -370,7 +364,7 @@ namespace winstall
             btnUpgradeAll.Enabled = !busy && nUp > 0;
         }
 
-        // ================= Загрузка =================
+        // Refresh.
 
         private async void RefreshAll()
         {
@@ -405,10 +399,10 @@ namespace winstall
                 foreach (var p in installed)
                 {
                     UpgradeEntry hit = null;
-                    // 1) Точное совпадение по Id (нормальный случай: ставили через winget).
+                    // Installed via winget: exact id match is the common case.
                     upById.TryGetValue(p.Id, out hit);
-                    // 2) Программа ставилась мимо winget (ARP-запись без Source):
-                    //    связываем по точному имени, обновлять будем по UpgradeId.
+                    // Side-loaded (ARP entry without a source): match by exact name
+                    // and upgrade through the linked UpgradeId.
                     if (hit == null && !string.IsNullOrWhiteSpace(p.Name))
                         upByName.TryGetValue(p.Name.Trim(), out hit);
                     if (hit != null)
@@ -422,13 +416,12 @@ namespace winstall
                              WingetRunner.LooksLikeVersion(p.InstalledVersion) &&
                              !p.AvailableVersion.Trim().Equals(p.InstalledVersion.Trim(), StringComparison.OrdinalIgnoreCase))
                     {
-                        // Новый формат `winget list` сам сообщает доступную версию
-                        // в 4-й колонке — верим ему, даже если `winget upgrade`
-                        // эту строку по какой-то причине не вернул.
+                        // Newer `winget list` reports the available version itself (4th column);
+                        // trust it when `winget upgrade` missed the row.
                         p.HasUpdate = true;
                     }
                 }
-                // Обновляемые — наверх, как в MInstall избранное
+                // Upgradable rows first.
                 installed = installed
                     .OrderByDescending(delegate (PackageInfo p) { return p.HasUpdate; })
                     .ThenBy(delegate (PackageInfo p) { return p.DisplayName; })
@@ -436,7 +429,7 @@ namespace winstall
 
                 searchBase = null;
                 txtSearch.Clear();
-                searchTimer.Stop(); // Clear() взводит таймер — гасим, иначе через 0.5с перерисует и затрёт статус
+                searchTimer.Stop(); // Clear() rearms the timer; stop it before it repaints over the status.
                 SetView(0);
                 ApplyFilter();
                 int nUp = installed.Count(delegate (PackageInfo p) { return p.HasUpdate; });
@@ -454,9 +447,8 @@ namespace winstall
             }
         }
 
-        // ================= Фильтр категорий =================
-        // Категорий всего три, без дублей: Установленные, Обновления, Поиск.
-        // Поиск включается сам, когда печатаешь запрос; очистил — возврат.
+        // View filter. Exactly three views, no overlap: Installed, Updates, Search.
+        // Typing a query switches to Search automatically; clearing it switches back.
 
         private void SetView(int i)
         {
@@ -471,7 +463,7 @@ namespace winstall
             int view = cmbView.SelectedIndex;
             if (searchBase == null && view == 2)
             {
-                // «Поиск» без запроса показывать нечего.
+                // Search without a query has nothing to show.
                 RenderList(new List<PackageInfo>());
                 lblStatus.Text = L.T("status_type_query");
                 return;
@@ -502,7 +494,6 @@ namespace winstall
             syncing = true;
             lv.BeginUpdate();
             lv.Items.Clear();
-            shown = data;
             foreach (var p in data)
             {
                 int img = icons.GetIndex(p);
@@ -510,7 +501,7 @@ namespace winstall
                 item.Tag = p;
                 item.Checked = false;
                 item.UseItemStyleForSubItems = false;
-                // В духе MInstall — одна версия: для обновляемого показываем целевую.
+                // One version per row: upgradable rows show the target version.
                 string ver = p.HasUpdate ? p.AvailableVersion
                     : (p.IsInstalled ? p.InstalledVersion : p.AvailableVersion);
                 var subVer = new ListViewItem.ListViewSubItem(item,
@@ -520,10 +511,10 @@ namespace winstall
                 var subAct = new ListViewItem.ListViewSubItem(item, p.HasUpdate ? "↑" : "");
                 subAct.ForeColor = SystemColors.GrayText;
                 item.SubItems.Add(subAct);
-                // Обновляемые — жирным наверх, как было
+                // Upgradable rows render bold.
                 if (p.HasUpdate)
                     item.Font = new Font(lv.Font, FontStyle.Bold);
-                // Найденное, но не установленное — серым
+                // Found-but-not-installed rows render gray.
                 if (!p.IsInstalled)
                     item.ForeColor = Color.DimGray;
                 lv.Items.Add(item);
@@ -538,7 +529,7 @@ namespace winstall
         private void Lv_ItemChecked(object sender, ItemCheckedEventArgs e)
         {
             if (syncing) return;
-            // Событие приходит и при перерисовке — защищаемся
+            // ItemChecked also fires during rebuilds; ignore those.
             if (e.Item == null || e.Item.Tag == null) return;
             var p = (PackageInfo)e.Item.Tag;
             var act = p.ActionFor(e.Item.Checked);
@@ -561,7 +552,7 @@ namespace winstall
         private void SetAllChecked(bool check)
         {
             foreach (ListViewItem it in lv.Items)
-                it.Checked = check; // через Lv_ItemChecked обновит значки и счётчик
+                it.Checked = check; // Glyphs and counters update through Lv_ItemChecked.
         }
 
         private List<KeyValuePair<PackageInfo, PendingAction>> CollectChecked()
@@ -589,7 +580,7 @@ namespace winstall
             syncing = false;
         }
 
-        // ================= Описание выбранной =================
+        // Details pane.
 
         private readonly Dictionary<string, string> showCache =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -645,7 +636,7 @@ namespace winstall
             int my = ++descSeq;
             string key = showId;
             string raw = await WingetRunner.ShowAsync(key).ConfigureAwait(true);
-            if (my != descSeq) return; // выбор уже сменился — чужое не показываем
+            if (my != descSeq) return; // Stale response; the selection already moved on.
             if (lv.SelectedItems.Count == 0) return;
             var cur = lv.SelectedItems[0].Tag as PackageInfo;
             if (cur == null) return;
@@ -671,7 +662,7 @@ namespace winstall
             txtDesc.Text = BuildBaseDesc(cur) + text;
         }
 
-        // ================= Поиск =================
+        // Search.
 
         private async void OnSearchGo()
         {
@@ -681,12 +672,12 @@ namespace winstall
             {
                 searchBase = null;
                 if (cmbView.SelectedIndex == 2)
-                    SetView(0); // был «Поиск» — возвращаем «Установленные»
+                    SetView(0); // Was on Search; return to Installed.
                 ApplyFilter();
                 lblStatus.Text = L.F("status_short_n", installed.Count);
                 return;
             }
-            // Короткие запросы — только фильтр по установленным (мгновенно)
+            // Short queries filter the installed list only (instant, no round-trip).
             if (q.Length < 2)
             {
                 searchBase = installed.Where(delegate (PackageInfo p)
@@ -698,7 +689,7 @@ namespace winstall
                 return;
             }
 
-            // Сначала локальный фильтр (мгновенно)
+            // Local filter first (instant).
             var local = installed.Where(delegate (PackageInfo p)
             {
                 return p.DisplayName.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -715,11 +706,9 @@ namespace winstall
                     installed.Where(delegate (PackageInfo p) { return !string.IsNullOrWhiteSpace(p.Name); })
                              .Select(delegate (PackageInfo p) { return p.Name.Trim(); }),
                     StringComparer.OrdinalIgnoreCase);
-                // Добавляем только то, чего ещё нет в установленных.
-                // Сравнение и по Id, и по имени: иначе программа, поставленная
-                // мимо winget (в списке как ARP\...), покажется в поиске как
-                // «новая», а `install` по ней упрётся в «уже установлено,
-                // нужна переустановка», хотя консольный `upgrade` работает.
+                // Merge in only what isn't installed yet. Match by id and by name:
+                // a side-loaded app (ARP row) would otherwise surface as "new" and
+                // `install` would fail with "already installed" while `upgrade` works.
                 foreach (var r in remote)
                 {
                     if (knownIds.Contains(r.Id)) continue;
@@ -731,7 +720,7 @@ namespace winstall
                     .ThenByDescending(delegate (PackageInfo p) { return p.IsInstalled; })
                     .ThenBy(delegate (PackageInfo p) { return p.DisplayName; })
                     .ToList();
-                SetView(2); // запрос есть — переключаемся в категорию «Поиск»
+                SetView(2); // A query is active; switch to the Search view.
                 ApplyFilter();
                 lblStatus.Text = L.F("status_found", q, local.Count,
                     local.Count(delegate (PackageInfo p) { return p.IsInstalled; }));
@@ -754,8 +743,9 @@ namespace winstall
         }
 
         /// <summary>
-        /// winget отказался от upgrade, потому что технология установщика
-        /// отличается от установленной (код 0x8A15008E, у LLVM было именно это)?
+        /// Did winget refuse the upgrade because the installer technology differs
+        /// from the installed one (exit code 0x8A15008E)? Falls back to message
+        /// matching in RU/EN when the code alone is inconclusive.
         /// </summary>
         private static bool IsTechnologyDiffers(WingetResult r)
         {
@@ -767,9 +757,9 @@ namespace winstall
         }
 
         /// <summary>
-        /// Переустановка для случая «технология установщика изменилась»:
-        /// сначала uninstall, потом install свежей версии.
-        /// Возвращает 1 = получилось, 0 = не вышло, -1 = пользователь отказался.
+        /// Reinstall path for the changed-installer-technology case:
+        /// uninstall first, then install the fresh version.
+        /// Returns 1 on success, 0 on failure, -1 when the user declines.
         /// </summary>
         private async Task<int> ReinstallAsync(PackageInfo pkg, StringBuilder log)
         {
@@ -784,20 +774,20 @@ namespace winstall
             }
 
             lblStatus.Text = L.F("status_removing", pkg.DisplayName);
-            var u = await WingetRunner.RunAsync(WingetRunner.BuildArgs("uninstall", pkg), 600000).ConfigureAwait(true);
+            var u = await WingetRunner.RunAsync(WingetRunner.BuildArgs("uninstall", pkg), WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             if (u.ExitCode != 0 && !string.IsNullOrWhiteSpace(pkg.UpgradeId))
             {
-                // Не удалилось по Id из списка — пробуем по winget-Id.
+                // The list id didn't uninstall; retry with the winget id.
                 var alt = new PackageInfo();
                 alt.Id = pkg.UpgradeId;
                 alt.Name = pkg.Name;
-                u = await WingetRunner.RunAsync(WingetRunner.BuildArgs("uninstall", alt), 600000).ConfigureAwait(true);
+                u = await WingetRunner.RunAsync(WingetRunner.BuildArgs("uninstall", alt), WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             }
             if (u.ExitCode != 0)
             {
                 log.AppendLine(L.F("log_uninst_fail", pkg.DisplayName, u.ExitCode));
                 string tail = (u.StdOut + "\n" + u.StdErr).Trim();
-                if (tail.Length > 1500) tail = tail.Substring(tail.Length - 1500);
+                if (tail.Length > WingetRunner.MaxOutputTail) tail = tail.Substring(tail.Length - WingetRunner.MaxOutputTail);
                 if (!string.IsNullOrWhiteSpace(tail)) log.AppendLine(tail);
                 log.AppendLine();
                 return 0;
@@ -807,20 +797,20 @@ namespace winstall
             var ins = new PackageInfo();
             ins.Id = pkg.EffectiveUpgradeId;
             ins.Name = pkg.Name;
-            var ir = await WingetRunner.RunAsync(WingetRunner.BuildArgs("install", ins), 600000).ConfigureAwait(true);
+            var ir = await WingetRunner.RunAsync(WingetRunner.BuildArgs("install", ins), WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             bool good = ir.ExitCode == 0;
             log.AppendLine(L.F("log_reinstall", good ? "OK" : "FAIL", pkg.DisplayName, ir.ExitCode));
             if (!good)
             {
                 string tail2 = (ir.StdOut + "\n" + ir.StdErr).Trim();
-                if (tail2.Length > 1500) tail2 = tail2.Substring(tail2.Length - 1500);
+                if (tail2.Length > WingetRunner.MaxOutputTail) tail2 = tail2.Substring(tail2.Length - WingetRunner.MaxOutputTail);
                 if (!string.IsNullOrWhiteSpace(tail2)) log.AppendLine(tail2);
             }
             log.AppendLine();
             return good ? 1 : 0;
         }
 
-        // ================= Применение галочек =================
+        // Apply.
 
         private async void ApplyChecked()
         {
@@ -854,12 +844,12 @@ namespace winstall
                                   job.Value == PendingAction.Upgrade ? "upgrade" : "uninstall";
                     lblStatus.Text = string.Format("{0}: {1}…", PackageInfo.ActionText(job.Value), pkg.DisplayName);
                     string args = WingetRunner.BuildArgs(verb, pkg);
-                    var r = await WingetRunner.RunAsync(args, 600000).ConfigureAwait(true);
+                    var r = await WingetRunner.RunAsync(args, WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
                     bool good = r.ExitCode == 0;
                     if (!good && job.Value == PendingAction.Upgrade && IsTechnologyDiffers(r))
                     {
-                        // winget сам отказался обновлять: «технология установки
-                        // отличается от текущей». Лечится только сносом + установкой заново.
+                        // winget refused a direct upgrade (installer technology differs);
+                        // uninstall + fresh install is the only way forward.
                         int rc = await ReinstallAsync(pkg, log).ConfigureAwait(true);
                         if (rc > 0) ok++;
                         else if (rc == 0) fail++;
@@ -869,11 +859,10 @@ namespace winstall
                     log.AppendLine(L.F("log_row", good ? "OK" : "FAIL", pkg.DisplayName, pkg.Id, r.ExitCode));
                     if (!good)
                     {
-                        // Полный хвост вывода + точная команда, чтобы было видно,
-                        // почему консольный winget срабатывает, а тут нет.
+                        // Include the exact command and the output tail for diagnosability.
                         log.AppendLine(L.F("log_cmd", args));
                         string tail = (r.StdOut + "\n" + r.StdErr).Trim();
-                        if (tail.Length > 1500) tail = tail.Substring(tail.Length - 1500);
+                        if (tail.Length > WingetRunner.MaxOutputTail) tail = tail.Substring(tail.Length - WingetRunner.MaxOutputTail);
                         if (!string.IsNullOrWhiteSpace(tail)) log.AppendLine(tail);
                     }
                     log.AppendLine();
@@ -895,7 +884,7 @@ namespace winstall
             }
         }
 
-        // ================= Обновить всё =================
+        // Upgrade all.
 
         private async void UpgradeAll()
         {
@@ -917,13 +906,13 @@ namespace winstall
             SetBusy(true, L.T("status_working"));
             try
             {
-                // Один вызов на всё — быстрее и проще, чем по одному.
+                // One call upgrades everything; cheaper than per-package runs.
                 var r = await WingetRunner.RunAsync(
                     "upgrade --all --silent --accept-package-agreements --accept-source-agreements --disable-interactivity",
-                    7200000).ConfigureAwait(true);
+                    WingetRunner.BulkTimeoutMs).ConfigureAwait(true);
                 bool good = r.ExitCode == 0;
                 string tail = (r.StdOut + "\n" + r.StdErr).Trim();
-                if (tail.Length > 2000) tail = tail.Substring(tail.Length - 2000);
+                if (tail.Length > WingetRunner.MaxBulkOutputTail) tail = tail.Substring(tail.Length - WingetRunner.MaxBulkOutputTail);
                 MessageBox.Show(this,
                     (good ? L.T("msg_upd_all_done") : L.F("msg_upd_all_code", r.ExitCode)) + "\n\n" + tail,
                     L.T("msg_upd_all_t"),
@@ -942,7 +931,7 @@ namespace winstall
             }
         }
 
-        // ================= Hamburger: export / import + моё =================
+        // Package list import/export.
 
         private async void ExportList()
         {
@@ -957,10 +946,9 @@ namespace winstall
                 {
                     var r = await WingetRunner.RunAsync(
                         "export -o \"" + dlg.FileName.Replace("\"", "") + "\" --include-versions --accept-source-agreements --disable-interactivity",
-                        120000).ConfigureAwait(true);
+                        WingetRunner.DefaultTimeoutMs).ConfigureAwait(true);
                     if (r.ExitCode == 0)
-                        lblStatus.Text = L.F("status_exported", dlg.FileName);
-                    else
+                        lblStatus.Text = L.F("status_exported", dlg.FileName);                    else
                         MessageBox.Show(this,
                             string.Format(L.T("msg_export_fail"), r.ExitCode, r.StdOut + r.StdErr),
                             L.T("msg_export_t"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -990,9 +978,9 @@ namespace winstall
                 {
                     var r = await WingetRunner.RunAsync(
                         "import -i \"" + dlg.FileName.Replace("\"", "") + "\" --ignore-unavailable --accept-package-agreements --accept-source-agreements --disable-interactivity",
-                        7200000).ConfigureAwait(true);
+                        WingetRunner.BulkTimeoutMs).ConfigureAwait(true);
                     string tail = (r.StdOut + "\n" + r.StdErr).Trim();
-                    if (tail.Length > 2000) tail = tail.Substring(tail.Length - 2000);
+                    if (tail.Length > WingetRunner.MaxBulkOutputTail) tail = tail.Substring(tail.Length - WingetRunner.MaxBulkOutputTail);
                     MessageBox.Show(this,
                         (r.ExitCode == 0 ? L.T("msg_upd_all_done") : L.F("msg_upd_all_code", r.ExitCode)) + "\n\n" + tail,
                         L.T("msg_import_t"), MessageBoxButtons.OK,
@@ -1013,7 +1001,7 @@ namespace winstall
 
         private void SelectUpgradable()
         {
-            // Ставим галочки только обновляемым — удобно перед «Выполнить».
+            // Check upgradable rows only; handy before Run.
             lv.ItemChecked -= Lv_ItemChecked;
             try
             {
@@ -1093,7 +1081,8 @@ namespace winstall
         }
 
         private void OpenWingetLogs()
-        {            try
+        {
+            try
             {
                 string dir = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

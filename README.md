@@ -98,3 +98,7 @@ dotnet run --project tests\parsetest\parsetest.csproj
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).
+
+## Авторы
+
+Yanletov168 — совместно с [OpenCode](https://opencode.ai) / Meta Muse Spark 1.3.

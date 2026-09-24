@@ -25,7 +25,7 @@ class P {
         return null;
     }
     static int Main() {
-        // Новый 5-колоночный формат (машина пользователя)
+        // New 5-column layout.
         string five =
             "Имя                             ИД                                Версия     Доступно   Источник\r\n" +
             "-----------------------------------------------------------------------------------------------\r\n" +
@@ -41,7 +41,7 @@ class P {
         Check("5col arp src empty", l5[2].Source == "");
         Check("5col arp IsArp", l5[2].IsArp);
 
-        // Старый 4-колоночный формат
+        // Legacy 4-column layout.
         string four =
             "Name  ID  Version  Source\r\n" +
             "--------------------------------\r\n" +
@@ -53,7 +53,7 @@ class P {
         Check("4col git avail empty", l4[0].AvailableVersion == "");
         Check("4col arp src empty", l4[1].Source == "");
 
-        // 4 токена где 4-й — версия (новый формат, source пуст)
+        // 4 tokens where the 4th is a version (new layout, empty source).
         string fourV =
             "Name  ID  Version  Available\r\n" +
             "--------------------------------\r\n" +
@@ -70,7 +70,7 @@ class P {
         p2.Id = "Git.Git";
         Check("EffectiveUpgradeId fallback", p2.EffectiveUpgradeId == "Git.Git");
 
-        // winget show: издатель + блок описания
+        // winget show: publisher + description block.
         string show =
             "Найдено Steam [Valve.Steam]\r\n" +
             "Версия: 2.10.91.91\r\n" +
@@ -87,8 +87,8 @@ class P {
         Check("show desc 2 lines", desc.Contains("ultimate destination") && desc.Contains("automates game updates"));
         Check("show desc stops at next section", !desc.Contains("store.steampowered") && !desc.Contains("Proprietary"));
 
-        // Локализации: en/ru синхронны, \n разворачивается, фолбэк работает.
-        // Корень репо ищем вверх от каталога запуска (там лежит locales/).
+        // Locales: en/ru key parity, \n unescaping, fallback.
+        // The repo root is found by walking up from the test binary (locales/ lives there).
         string locDir = FindLocales();
         Check("locales dir found", locDir != null);
         if (locDir == null) return 1;
@@ -106,7 +106,7 @@ class P {
         Check("fallback unknown key", L.T("no_such_key_xyz") == "no_such_key_xyz");
         Check("embedded fallback act", new PackageInfo().ActionFor(true) == PendingAction.Install && PackageInfo.ActionText(PendingAction.Upgrade) == "upgrade");
 
-        // Флаги под команды: у uninstall нет --accept-package-agreements (иначе winget печатает справку, 0x8A150002)
+        // Per-verb flags: uninstall has no --accept-package-agreements (winget prints usage, 0x8A150002).
         var bp = new PackageInfo();
         bp.Id = "LLVM.LLVM";
         Check("uninstall has no package-agreements", !WingetRunner.BuildArgs("uninstall", bp).Contains("accept-package"));
@@ -117,7 +117,7 @@ class P {
         bp2.Id = "ARP\\Machine\\X64\\LLVM"; bp2.UpgradeId = "LLVM.LLVM";
         Check("upgrade uses UpgradeId", WingetRunner.BuildArgs("upgrade", bp2).Contains("LLVM.LLVM") && !WingetRunner.BuildArgs("upgrade", bp2).Contains("ARP"));
 
-        // Задача планировщика: полный цикл (создали — увидели — удалили)
+        // Scheduler task: full cycle (create, verify, delete).
         try { AutoCheck.Disable(); } catch { }
         Check("task initially off", !AutoCheck.IsEnabled());
         string enErr = AutoCheck.Enable();

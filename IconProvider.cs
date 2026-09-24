@@ -8,8 +8,8 @@ using Microsoft.Win32;
 namespace winstall
 {
     /// <summary>
-    /// Иконки из реестра Uninstall (DisplayIcon / InstallLocation),
-    /// чтобы вместо Valve.Steam был знакомый значок Steam.
+    /// Row icons resolved from Uninstall registry entries (DisplayIcon / InstallLocation),
+    /// so the list shows the familiar app icon instead of a generic one.
     /// </summary>
     public class IconProvider : IDisposable
     {
@@ -27,7 +27,7 @@ namespace winstall
             images = new ImageList();
             images.ColorDepth = ColorDepth.Depth32Bit;
             images.ImageSize = new Size(16, 16);
-            images.Images.Add(SystemIcons.Application); // index 0
+            images.Images.Add(SystemIcons.Application);
             defaultIndex = 0;
             try { LoadUninstallMap(); } catch { }
         }
@@ -83,10 +83,10 @@ namespace winstall
             try
             {
                 string path = null;
-                // 1) Точное совпадение по DisplayName
+                // Exact DisplayName match first.
                 if (!string.IsNullOrWhiteSpace(pkg.Name) && uninstallIcons.TryGetValue(pkg.Name.Trim(), out string v))
                     path = v;
-                // 2) Поиск по части имени (Steam из "Steam")
+                // Then a substring match in either direction.
                 if (path == null)
                 {
                     foreach (var kv in uninstallIcons)
@@ -126,12 +126,12 @@ namespace winstall
 
         private static string CleanIconPath(string raw)
         {
-            // DisplayIcon бывает вида: "C:\...\app.exe,0" или с кавычками
+            // DisplayIcon looks like "C:\...\app.exe,0" or comes quoted.
             string s = raw.Trim().Trim('"');
             int comma = s.LastIndexOf(',');
             if (comma > 0 && s.EndsWith(",0"))
                 s = s.Substring(0, comma).Trim().Trim('"');
-            // InstallLocation бывает папкой
+            // InstallLocation can be a directory, not a file.
             if (Directory.Exists(s)) return null;
             return s;
         }

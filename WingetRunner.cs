@@ -15,7 +15,7 @@ namespace winstall
         public string StdErr = "";
     }
 
-    /// <summary>Строка из `winget upgrade`: что установлено и до чего обновить.</summary>
+    /// <summary>One row of winget upgrade output: installed vs. available version.</summary>
     public class UpgradeEntry
     {
         public string Name = "";
@@ -26,11 +26,18 @@ namespace winstall
 
     public static class WingetRunner
     {
+        public const int DefaultTimeoutMs = 120000;
+        public const int SearchTimeoutMs = 60000;
+        public const int OperationTimeoutMs = 600000;
+        public const int BulkTimeoutMs = 7200000;
+        public const int MaxOutputTail = 1500;
+        public const int MaxBulkOutputTail = 2000;
+
         private static readonly Regex Split2Plus = new Regex(@"\s{2,}", RegexOptions.Compiled);
 
         public static string FindWinget()
         {
-            // 1) PATH
+            // PATH lookup first.
             try
             {
                 var r = new Process();
@@ -51,14 +58,14 @@ namespace winstall
             }
             catch { }
 
-            // 2) Стандартный путь App Installer
+            // Default App Installer location.
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string cand = Path.Combine(local, @"Microsoft\WindowsApps\winget.exe");
             if (File.Exists(cand)) return cand;
             return null;
         }
 
-        public static Task<WingetResult> RunAsync(string args, int timeoutMs = 120000)
+        public static Task<WingetResult> RunAsync(string args, int timeoutMs = DefaultTimeoutMs)
         {
             return Task.Run(() =>
             {
@@ -71,7 +78,7 @@ namespace winstall
                 psi.CreateNoWindow = true;
                 psi.StandardOutputEncoding = Encoding.UTF8;
                 psi.StandardErrorEncoding = Encoding.UTF8;
-                // Отключаем интерактив: важно для тихого режима на LTSC.
+                // Unattended operation requires non-interactive winget.
                 psi.EnvironmentVariables["WINGET_DISABLE_INTERACTIVITY"] = "1";
 
                 var sbOut = new StringBuilder();
@@ -101,7 +108,7 @@ namespace winstall
             });
         }
 
-        // ---------- Парсинг таблиц winget (колонки разделены 2+ пробелами) ----------
+        // winget table parsing: columns are separated by 2+ spaces.
 
         private static string[] SplitRow(string line)
         {
@@ -128,7 +135,7 @@ namespace winstall
                 string line = raw.TrimEnd();
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 if (IsDashes(line)) { dataStarted = true; continue; }
-                if (!dataStarted) continue; // пропускаем заголовок
+                if (!dataStarted) continue; // Header row.
                 if (line.StartsWith("<") || line.StartsWith("Найдено") || line.StartsWith("Found") ||
                     line.StartsWith("Доступно") || line.StartsWith("No ")) continue;
                 var parts = SplitRow(line);
@@ -138,11 +145,10 @@ namespace winstall
         }
 
         /// <summary>
-        /// winget list -> установленные.
-        /// Старый формат: Name | Id | Version | Source.
-        /// Новый формат (как на твоей машине): Name | Id | Version | Available | Source,
-        /// где Available может быть пустым. Именно поэтому колонка «Источник/ID»
-        /// показывала версию: 4-й токен принимали за Source.
+        /// winget list output. Column layout depends on the winget version:
+        /// legacy: Name | Id | Version | Source;
+        /// current: Name | Id | Version | Available | Source (Available may be empty).
+        /// A 4-token row is ambiguous and resolved by shape: sources never look like versions.
         /// </summary>
         public static List<PackageInfo> ParseList(string stdout)
         {
@@ -157,9 +163,8 @@ namespace winstall
                 if (p.Length >= 5) { avail = p[3]; src = p[4]; }
                 else if (p.Length == 4)
                 {
-                    // 4 токена: либо [Name,Id,Ver,Source] (старый формат),
-                    // либо [Name,Id,Ver,Available] с пустым Source (новый).
-                    // Source версией не бывает — различаем по виду токена.
+                    // Either [Name, Id, Ver, Source] (legacy) or
+                    // [Name, Id, Ver, Available] with an empty Source (current).
                     if (LooksLikeVersion(p[3])) avail = p[3];
                     else src = p[3];
                 }
@@ -177,7 +182,7 @@ namespace winstall
 
         private static readonly Regex VersionLike = new Regex(@"^\d[\d\.\-+_]*$", RegexOptions.Compiled);
 
-        /// <summary>Похоже ли на версию (4.91.0, 26.7.1376.0), а не на имя источника.</summary>
+        /// <summary>Version-shaped tokens (4.91.0) as opposed to source names.</summary>
         public static bool LooksLikeVersion(string s)
         {
             if (string.IsNullOrWhiteSpace(s)) return false;
@@ -186,7 +191,7 @@ namespace winstall
             return VersionLike.IsMatch(s);
         }
 
-        /// <summary>winget upgrade -> доступные обновления. Колонки: Name | Id | Version | Available | Source.</summary>
+        /// <summary>winget upgrade columns: Name | Id | Version | Available | Source.</summary>
         public static List<UpgradeEntry> ParseUpgrades(string stdout)
         {
             var list = new List<UpgradeEntry>();
@@ -200,7 +205,7 @@ namespace winstall
             return list;
         }
 
-        /// <summary>winget search -> кандидаты. Колонки: Name | Id | Version | [Match] | Source.</summary>
+        /// <summary>winget search columns: Name | Id | Version | [Match] | Source.</summary>
         public static List<PackageInfo> ParseSearch(string stdout)
         {
             var list = new List<PackageInfo>();
@@ -234,22 +239,21 @@ namespace winstall
 
         public static async Task<List<PackageInfo>> SearchAsync(string query, int count = 30)
         {
-            // Экранируем кавычки
-            string q = query.Replace("\"", "");
-            var r = await RunAsync("search \"" + q + "\" -n " + count + " --accept-source-agreements --disable-interactivity", 60000).ConfigureAwait(false);
+            string q = query.Replace("\"", ""); // Keep the command line intact.
+            var r = await RunAsync("search \"" + q + "\" -n " + count + " --accept-source-agreements --disable-interactivity", SearchTimeoutMs).ConfigureAwait(false);
             return ParseSearch(r.StdOut);
         }
 
-        /// <summary>Полная карточка пакета (`winget show`). Null, если пакет не найден.</summary>
+        /// <summary>Full package card (winget show); null when the package is unknown.</summary>
         public static async Task<string> ShowAsync(string id)
         {
             string q = id.Replace("\"", "");
-            var r = await RunAsync("show --id \"" + q + "\" --accept-source-agreements --disable-interactivity", 60000).ConfigureAwait(false);
+            var r = await RunAsync("show --id \"" + q + "\" --accept-source-agreements --disable-interactivity", SearchTimeoutMs).ConfigureAwait(false);
             if (r.ExitCode != 0) return null;
             return r.StdOut;
         }
 
-        /// <summary>Вытаскивает из `winget show` издателя и блок описания.</summary>
+        /// <summary>Extracts the publisher and the description block from winget show output.</summary>
         public static void ParseShow(string stdout, out string publisher, out string description)
         {
             publisher = "";
@@ -279,7 +283,7 @@ namespace winstall
                         inDesc = true;
                     else if (t.StartsWith("Описание:") || t.StartsWith("Description:"))
                     {
-                        // Редкий случай: текст на той же строке.
+                        // Same-line text is rare, but handle it.
                         int c = t.IndexOf(':');
                         if (c >= 0 && c + 1 < t.Length) sb.AppendLine(t.Substring(c + 1).Trim());
                         inDesc = true;
@@ -293,23 +297,21 @@ namespace winstall
                     continue;
                 }
                 if (raw.Trim().Length == 0) continue;
-                break; // кончился блок с отступом — дальше другие секции
+                break; // Indented block is over, other sections follow.
             }
             description = sb.ToString().Trim();
         }
 
         public static string BuildArgs(string verb, PackageInfo pkg)
         {
-            // Для ARP-записей обновляемся по связанному winget-Id (см. UpgradeId),
-            // иначе winget не поймёт, что именно обновлять.
+            // ARP rows upgrade by the linked winget id (see UpgradeId).
             string useId = verb == "upgrade" ? pkg.EffectiveUpgradeId : pkg.Id;
             string idQ = "\"" + useId.Replace("\"", "") + "\"";
             string common = "--id " + idQ + " --accept-source-agreements --disable-interactivity ";
             switch (verb)
             {
-                // ВАЖНО: у uninstall НЕТ --accept-package-agreements (нечего принимать).
-                // Если его передать — winget ответит справкой и кодом 0x8A150002,
-                // как и было с LLVM. У install/upgrade флаг есть.
+                // NOTE: uninstall has no --accept-package-agreements. Passing it makes
+                // winget print usage and exit 0x8A150002. install/upgrade keep the flag.
                 case "install": return "install " + common + "--accept-package-agreements --silent";
                 case "upgrade": return "upgrade " + common + "--accept-package-agreements --silent";
                 case "uninstall": return "uninstall " + common + "--silent";

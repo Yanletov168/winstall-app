@@ -9,14 +9,12 @@ using Microsoft.Win32;
 namespace winstall
 {
     /// <summary>
-    /// Автопроверка обновлений без службы и без прав админа:
-    /// вход в систему — через автозапуск HKCU\...\Run,
-    /// пробуждение — через задачу планировщика \\winstall\\winstall-wake
-    /// (триггер ONEVENT: Power-Troubleshooter ID 1).
-    /// Оба запускают winstall.exe --check-updates: тихо считает обновления
-    /// и показывает баллун только с количеством, без списка программ.
-    /// Проверено: ONLOGON-триггер и импорт XML требуют админа, а связка
-    /// Run + ONEVENT работает из-под обычного пользователя.
+    /// Update checking without a service and without admin rights: logon is covered
+    /// by the HKCU\...\Run autostart entry, wake by the \\winstall\\winstall-wake
+    /// scheduler task (ONEVENT: Power-Troubleshooter ID 1). Both run
+    /// winstall.exe --check-updates, which quietly counts updates and balloons
+    /// the count only. Note: ONLOGON triggers and XML imports require elevation,
+    /// while Run + ONEVENT works for a standard user.
     /// </summary>
     public static class AutoCheck
     {
@@ -37,7 +35,7 @@ namespace winstall
             string err1 = SetRunValue();
             string err2 = CreateWakeTask();
             if (IsEnabled()) return null;
-            // Откат: не оставляем половинчатое состояние.
+            // Roll back instead of leaving a half-enabled state.
             try { RemoveRunValue(); } catch { }
             try { DeleteWakeTask(); } catch { }
             return err2 ?? err1 ?? "unknown";
@@ -53,7 +51,7 @@ namespace winstall
             return err2 ?? err1 ?? "unknown";
         }
 
-        // ---------- автозапуск (вход) ----------
+        // Logon autostart.
 
         private static string RunCommand()
         {
@@ -96,7 +94,7 @@ namespace winstall
             }
         }
 
-        // ---------- задача на пробуждение ----------
+        // Wake task.
 
         private static bool TaskExists()
         {
@@ -105,9 +103,9 @@ namespace winstall
 
         private static string CreateWakeTask()
         {
-            // /TR целиком — один argv-элемент: внешние кавычки для CreateProcess,
-            // внутренние экранируем как \" — иначе путь с пробелами развалится
-            // (см.: schtasks ругался «Неправильный параметр» из Default Project).
+            // /TR must arrive as a single argv element: outer quotes for CreateProcess,
+            // inner ones escaped as \" — otherwise paths with spaces break apart
+            // and schtasks reports an invalid parameter.
             string trValue = "\\\"" + Application.ExecutablePath + "\\\" " + CheckArg;
             string args = "/Create /TN \"" + TaskName + "\""
                 + " /TR \"" + trValue + "\""
@@ -126,7 +124,7 @@ namespace winstall
             if (code != 0)
             {
                 string t = err.ToString();
-                // Задачи уже нет — это тоже успех.
+                // Already gone counts as success (message matched in RU/EN).
                 if (t.IndexOf("найти", StringComparison.OrdinalIgnoreCase) >= 0
                     || t.IndexOf("cannot find", StringComparison.OrdinalIgnoreCase) >= 0
                     || t.IndexOf("find the file", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -141,7 +139,7 @@ namespace winstall
             return RunSchtasks(args, null);
         }
 
-        private static int RunSchtasks(string args, System.Text.StringBuilder stderr)
+        private static int RunSchtasks(string args, StringBuilder stderr)
         {
             try
             {
@@ -150,7 +148,7 @@ namespace winstall
                 psi.RedirectStandardOutput = true;
                 psi.RedirectStandardError = true;
                 psi.CreateNoWindow = true;
-                // schtasks пишет в OEM-кодировке консоли.
+                // schtasks writes in the console OEM code page.
                 try
                 {
                     int oem = GetOEMCP();
@@ -185,8 +183,8 @@ namespace winstall
         private static extern int GetOEMCP();
 
         /// <summary>
-        /// Тихий режим: посчитать обновления, показать баллун с количеством
-        /// (без списка программ), клик по баллуну открывает winstall.
+        /// Quiet mode: count updates, balloon the count (no program list);
+        /// clicking the balloon opens winstall.
         /// </summary>
         public static void RunCheckAndNotify()
         {
@@ -195,7 +193,7 @@ namespace winstall
             {
                 try
                 {
-                    // После сна/свежего входа сеть может ещё подниматься — повтор.
+                    // The network may still be coming up after sleep/fresh logon; retry once.
                     if (attempt > 0) Thread.Sleep(90000);
                     n = WingetRunner.GetUpgradesAsync().GetAwaiter().GetResult().Count;
                 }

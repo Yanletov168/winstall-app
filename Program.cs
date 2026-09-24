@@ -8,10 +8,10 @@ namespace winstall
         [STAThread]
         static void Main(string[] args)
         {
-            // Для корректного чтения UTF-8 вывода winget (русские имена).
+            // UTF-8 for winget output (non-ASCII package names).
             try { Console.OutputEncoding = System.Text.Encoding.UTF8; } catch { }
 
-            // Тихий режим для задачи планировщика: проверить и уведомить, без окна.
+            // Quiet mode for the scheduler task: check, notify, no window.
             foreach (var a in args)
             {
                 if (a.Equals(AutoCheck.CheckArg, StringComparison.OrdinalIgnoreCase))

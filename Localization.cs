@@ -11,14 +11,14 @@ namespace winstall
     {
         public string Code = "en";
         public string Name = "English";
-        public string Path; // null = встроенный английский (exe работает и без файлов)
+        public string Path; // Null for the embedded English (the exe also runs standalone).
         public bool Embedded;
     }
 
     /// <summary>
-    /// Локализация через JSON-файлы в папке locales рядом с программой.
-    /// Новый язык = просто положить locales/xx.json, он сам появится в меню ☰.
-    /// В базе лежат en.json и ru.json. Без файлов работает встроенный английский.
+    /// UI localization from JSON files in locales/ next to the executable.
+    /// Dropping in locales/xx.json adds a language to the hamburger menu.
+    /// en.json and ru.json ship with the app; embedded English covers the no-files case.
     /// </summary>
     public static class L
     {
@@ -83,7 +83,7 @@ namespace winstall
                         li.Code = code.Trim();
                         li.Name = string.IsNullOrWhiteSpace(name) ? li.Code : name.Trim();
                         li.Path = f;
-                        byCode[li.Code] = li; // файл вытесняет встроенный при совпадении кода
+                        byCode[li.Code] = li; // A file shadows the embedded entry on a code clash.
                     }
                 }
             }
@@ -155,7 +155,7 @@ namespace winstall
             catch { }
         }
 
-        /// <summary>Разбор файла локализации. Формат: {"code":"ru","name":"Русский","strings":{...}}.</summary>
+        /// <summary>Parses a locale file: {"code":"xx","name":"...","strings":{...}}.</summary>
         public static bool ParseFile(string path, out string code, out string name, out Dictionary<string, string> map)
         {
             code = null; name = null;
@@ -245,7 +245,7 @@ namespace winstall
             return sb.ToString();
         }
 
-        // Встроенный английский — страховка, если рядом нет файлов.
+        // Embedded English fallback for the no-files case.
         private static readonly Dictionary<string, string> embeddedEn =
             new Dictionary<string, string>(StringComparer.Ordinal);
 
