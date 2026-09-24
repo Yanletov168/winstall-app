@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -18,10 +17,22 @@ namespace winstall
     /// </summary>
     public class MainForm : Form
     {
-        // Gray cue banner for the search box (EM_SETCUEBANNER).
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int SendMessage(IntPtr hWnd, int msg, int wParam, string lParam);
-        private const int EM_SETCUEBANNER = 0x1501;
+        // Manual search placeholder: the native cue banner does not paint
+        // on borderless edits, so the hint text is managed explicitly.
+        private void ShowSearchCue()
+        {
+            showingSearchCue = true;
+            txtSearch.Text = L.T("search_cue");
+            txtSearch.ForeColor = Theme.Current.GrayText;
+        }
+
+        private void HideSearchCue()
+        {
+            if (!showingSearchCue) return;
+            showingSearchCue = false;
+            txtSearch.Text = "";
+            txtSearch.ForeColor = Theme.Current.Text;
+        }
 
         private Button btnView;
         private ContextMenuStrip viewMenu;
@@ -36,6 +47,7 @@ namespace winstall
         private ColumnHeader colVer;
         private ColumnHeader colAct;
         private TextBox txtSearch;
+        private bool showingSearchCue;
         private Label lblCount;
         private CheckBox chkAll;
         private Button btnNone;
@@ -212,16 +224,19 @@ namespace winstall
             txtSearch = new TextBox();
             txtSearch.BorderStyle = BorderStyle.None;
             txtSearch.Dock = DockStyle.Fill;
+            txtSearch.Enter += delegate { HideSearchCue(); };
+            txtSearch.Leave += delegate { if (txtSearch.Text == "") ShowSearchCue(); };
             txtSearch.TextChanged += delegate
             {
-                searchTimer.Stop();
-                searchTimer.Start();
+                if (txtSearch.Focused && showingSearchCue) HideSearchCue();
+                else if (!txtSearch.Focused && txtSearch.Text == "" && showingSearchCue) ShowSearchCue();
+                if (searchTimer != null) { searchTimer.Stop(); searchTimer.Start(); }
             };
             var searchFrame = FrameFor(txtSearch);
             searchRow.Controls.Add(searchFrame);
             // Dock the Fill control last, otherwise it stretches underneath the buttons.
             searchRow.Controls.SetChildIndex(searchFrame, 0);
-            SendMessage(txtSearch.Handle, EM_SETCUEBANNER, 0, L.T("search_cue"));
+            ShowSearchCue();
 
             // Details pane for the selected package.
             txtDesc = new TextBox();
@@ -281,6 +296,7 @@ namespace winstall
         {
             Theme.Apply(this, hamburger, Theme.IsDark(Options.Theme));
             foreach (ListViewItem it in lv.Items) PaintRow(it);
+            if (showingSearchCue) ShowSearchCue();
             UpdateDesc();
         }
 
@@ -436,7 +452,6 @@ namespace winstall
             chkAll.Text = L.T("chk_all");
             colName.Text = L.T("col_program");
             colVer.Text = L.T("col_version");
-            SendMessage(txtSearch.Handle, EM_SETCUEBANNER, 0, L.T("search_cue"));
             UpdateUpgradeAllButton();
             BuildHamburger();
             ApplyFilter(); // Rebuilds rows and clears checks; restored below.
@@ -453,6 +468,7 @@ namespace winstall
             }
             finally { lv.ItemChecked += Lv_ItemChecked; }
             RefreshCounts();
+            if (showingSearchCue) ShowSearchCue();
             UpdateDesc();
         }
 
@@ -792,7 +808,7 @@ namespace winstall
         private async void OnSearchGo()
         {
             if (busy) return;
-            string q = txtSearch.Text.Trim();
+            string q = showingSearchCue ? "" : txtSearch.Text.Trim();
             if (q.Length == 0)
             {
                 searchBase = null;
