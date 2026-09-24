@@ -23,7 +23,9 @@ namespace winstall
         private static extern int SendMessage(IntPtr hWnd, int msg, int wParam, string lParam);
         private const int EM_SETCUEBANNER = 0x1501;
 
-        private ComboBox cmbView;
+        private Button btnView;
+        private ContextMenuStrip viewMenu;
+        private int viewIndex;
         private Button btnGo;
         private Button btnUpgradeAll;
         private Button btnRefresh;
@@ -49,7 +51,6 @@ namespace winstall
         private List<PackageInfo> searchBase; // Null when no search is active; the installed list shows then.
         private bool busy;
         private bool syncing;
-        private bool changingView;
         private bool autoCheckEnabled;
 
         public MainForm()
@@ -102,18 +103,20 @@ namespace winstall
             top.Padding = new Padding(6, 6, 4, 2);
             Controls.Add(top);
 
-            cmbView = new ComboBox();
-            cmbView.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbView.Dock = DockStyle.Fill;
-            cmbView.Items.AddRange(new object[] {
-                L.T("view_installed"),
-                L.T("view_updates"),
-                L.T("view_search")
-            });
-            cmbView.SelectedIndex = 0;
-            cmbView.SelectedIndexChanged += delegate { if (!changingView) ApplyFilter(); };
-            top.Controls.Add(cmbView);
-
+            // View selector: a flat button with a themed dropdown menu instead of
+            // a ComboBox, whose arrow button and popup ignore dark colors.
+            btnView = new Button();
+            btnView.Dock = DockStyle.Fill;
+            btnView.TextAlign = ContentAlignment.MiddleLeft;
+            btnView.Click += delegate
+            {
+                if (viewMenu != null)
+                    viewMenu.Show(btnView, new Point(0, btnView.Height));
+            };
+            top.Controls.Add(btnView);
+            viewMenu = new ContextMenuStrip();
+            viewIndex = 0;
+            RebuildViewMenu();
             btnRefresh = new Button();
             btnRefresh.Text = L.T("btn_refresh");
             btnRefresh.Width = 90;
@@ -421,16 +424,7 @@ namespace winstall
             var keep = new HashSet<PackageInfo>();
             foreach (var kv in CollectChecked()) keep.Add(kv.Key);
 
-            changingView = true;
-            int idx = cmbView.SelectedIndex;
-            cmbView.Items.Clear();
-            cmbView.Items.AddRange(new object[] {
-                L.T("view_installed"),
-                L.T("view_updates"),
-                L.T("view_search")
-            });
-            cmbView.SelectedIndex = idx < 0 || idx > 2 ? 0 : idx;
-            changingView = false;
+            RebuildViewMenu();
 
             Text = L.T("app_title");
             btnRefresh.Text = L.T("btn_refresh");
@@ -467,7 +461,7 @@ namespace winstall
             btnGo.Enabled = !b;
             btnUpgradeAll.Enabled = !b && HasAnyUpdate();
             btnMenu.Enabled = !b;
-            cmbView.Enabled = !b;
+            btnView.Enabled = !b;
             // The search box stays editable during operations.
             if (text != null) lblStatus.Text = text;
             Cursor = b ? Cursors.WaitCursor : Cursors.Default;
@@ -576,17 +570,40 @@ namespace winstall
         // View filter. Exactly three views, no overlap: Installed, Updates, Search.
         // Typing a query switches to Search automatically; clearing it switches back.
 
+        private static readonly string[] ViewKeys = new string[]
+        {
+            "view_installed", "view_updates", "view_search"
+        };
+
+        private void RebuildViewMenu()
+        {
+            viewMenu.Items.Clear();
+            for (int i = 0; i < ViewKeys.Length; i++)
+            {
+                int idx = i;
+                var mi = new ToolStripMenuItem(L.T(ViewKeys[i]));
+                mi.Checked = idx == viewIndex;
+                mi.Click += delegate
+                {
+                    SetView(idx);
+                    ApplyFilter();
+                };
+                viewMenu.Items.Add(mi);
+            }
+            btnView.Text = L.T(ViewKeys[viewIndex]) + "  ▾";
+            Theme.PaintMenu(viewMenu);
+        }
+
         private void SetView(int i)
         {
-            changingView = true;
-            cmbView.SelectedIndex = i;
-            changingView = false;
+            viewIndex = i;
+            RebuildViewMenu();
         }
 
         private void ApplyFilter()
         {
             List<PackageInfo> src = searchBase ?? installed;
-            int view = cmbView.SelectedIndex;
+            int view = viewIndex;
             if (searchBase == null && view == 2)
             {
                 // Search without a query has nothing to show.
@@ -776,7 +793,7 @@ namespace winstall
             if (q.Length == 0)
             {
                 searchBase = null;
-                if (cmbView.SelectedIndex == 2)
+                if (viewIndex == 2)
                     SetView(0); // Was on Search; return to Installed.
                 ApplyFilter();
                 lblStatus.Text = L.F("status_short_n", installed.Count);
