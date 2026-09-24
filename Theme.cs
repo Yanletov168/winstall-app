@@ -32,6 +32,8 @@ namespace winstall
             public Color MenuSelected;
             public Color ButtonHover;
             public Color ButtonDown;
+            public Color FrameBorder;
+            public Color FocusBorder;
         }
 
         public static readonly Palette Light = new Palette
@@ -52,7 +54,9 @@ namespace winstall
             MenuBorder = SystemColors.ControlDark,
             MenuSelected = SystemColors.Highlight,
             ButtonHover = SystemColors.ControlLight,
-            ButtonDown = SystemColors.ControlDark
+            ButtonDown = SystemColors.ControlDark,
+            FrameBorder = SystemColors.ControlDark,
+            FocusBorder = SystemColors.Highlight
         };
 
         public static readonly Palette Dark = new Palette
@@ -61,7 +65,7 @@ namespace winstall
             Window = Color.FromArgb(0x1E, 0x1E, 0x1E),
             Control = Color.FromArgb(0x38, 0x38, 0x38),
             Text = Color.FromArgb(0xF5, 0xF5, 0xF5),
-            GrayText = Color.FromArgb(0xA6, 0xA6, 0xA6),
+            GrayText = Color.FromArgb(0xB8, 0xB8, 0xB8),
             DimText = Color.FromArgb(0x9A, 0x9A, 0x9A),
             VersionBlue = Color.FromArgb(0x7F, 0xB8, 0xFF),
             CheckedGreen = Color.FromArgb(0x7B, 0xD8, 0x8A),
@@ -73,7 +77,9 @@ namespace winstall
             MenuBorder = Color.FromArgb(0x50, 0x50, 0x50),
             MenuSelected = Color.FromArgb(0x40, 0x40, 0x40),
             ButtonHover = Color.FromArgb(0x45, 0x45, 0x45),
-            ButtonDown = Color.FromArgb(0x33, 0x33, 0x33)
+            ButtonDown = Color.FromArgb(0x33, 0x33, 0x33),
+            FrameBorder = Color.FromArgb(0x50, 0x50, 0x50),
+            FocusBorder = Color.FromArgb(0x4C, 0xC2, 0xFF)
         };
 
         public static Palette Current { get; private set; } = Light;
@@ -103,17 +109,21 @@ namespace winstall
         {
             Current = dark ? Dark : Light;
             Paint(form, Current, dark);
-            if (menu != null)
-            {
-                menu.Renderer = dark
-                    ? (ToolStripRenderer)new ToolStripProfessionalRenderer(new DarkTable(Current))
-                    : (ToolStripRenderer)new ToolStripProfessionalRenderer();
-                menu.BackColor = Current.MenuBg;
-                menu.ForeColor = Current.MenuText;
-                PaintMenuItems(menu.Items, Current);
-            }
+            PaintMenu(menu);
             DarkScrollBars(form, dark);
             SetTitleBarDark(form, dark);
+        }
+
+        public static void PaintMenu(ContextMenuStrip menu)
+        {
+            if (menu == null) return;
+            Palette c = Current;
+            menu.Renderer = c == Dark
+                ? (ToolStripRenderer)new ToolStripProfessionalRenderer(new DarkTable(c))
+                : (ToolStripRenderer)new ToolStripProfessionalRenderer();
+            menu.BackColor = c.MenuBg;
+            menu.ForeColor = c.MenuText;
+            PaintMenuItems(menu.Items, c);
         }
 
         private static void PaintMenuItems(ToolStripItemCollection items, Palette c)
@@ -157,6 +167,7 @@ namespace winstall
             else if (x is ListView) { x.BackColor = c.Window; x.ForeColor = c.Text; }
             else if (x is StatusStrip) { x.BackColor = c.Control; x.ForeColor = c.Text; }
             else if (x is Label lb) { lb.ForeColor = Equals(lb.Tag, "muted") ? c.GrayText : c.Text; }
+            else if (x is Panel p && Equals(p.Tag, "frame")) { p.BackColor = c.FrameBorder; }
             else if (x is Panel || x is Form) { x.BackColor = c.FormBg; x.ForeColor = c.Text; }
             foreach (Control ch in x.Controls) Paint(ch, c, dark);
             if (x is StatusStrip ss)

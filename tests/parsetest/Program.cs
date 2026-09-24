@@ -295,6 +295,16 @@ class P {
                         throw new Exception("form not dark in " + m + " (mean=" + (int)mean + ")");
                     if (!expectDark && mean < 140)
                         throw new Exception("form not light in " + m + " (mean=" + (int)mean + ")");
+                    if (m != "system")
+                    {
+                        try
+                        {
+                            using (var shot = f.CaptureForm())
+                                shot.Save(System.IO.Path.Combine(
+                                    System.IO.Path.GetTempPath(), "winstall-shot-" + m + ".png"));
+                        }
+                        catch { }
+                    }
                 }
                 f.Close();
             }

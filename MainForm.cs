@@ -207,19 +207,22 @@ namespace winstall
             searchRow.Controls.Add(lblCount);
 
             txtSearch = new TextBox();
+            txtSearch.BorderStyle = BorderStyle.None;
             txtSearch.Dock = DockStyle.Fill;
             txtSearch.TextChanged += delegate
             {
                 searchTimer.Stop();
                 searchTimer.Start();
             };
-            searchRow.Controls.Add(txtSearch);
+            var searchFrame = FrameFor(txtSearch);
+            searchRow.Controls.Add(searchFrame);
             // Dock the Fill control last, otherwise it stretches underneath the buttons.
-            searchRow.Controls.SetChildIndex(txtSearch, 0);
+            searchRow.Controls.SetChildIndex(searchFrame, 0);
             SendMessage(txtSearch.Handle, EM_SETCUEBANNER, 0, L.T("search_cue"));
 
             // Details pane for the selected package.
             txtDesc = new TextBox();
+            txtDesc.BorderStyle = BorderStyle.None;
             txtDesc.Dock = DockStyle.Fill;
             txtDesc.Multiline = true;
             txtDesc.ReadOnly = true;
@@ -227,7 +230,7 @@ namespace winstall
             txtDesc.BackColor = SystemColors.Window;
             txtDesc.ForeColor = SystemColors.GrayText;
             txtDesc.Text = L.T("desc_legend");
-            bottom.Controls.Add(txtDesc);
+            bottom.Controls.Add(FrameFor(txtDesc));
             // The search row goes in after the details pane so Top docks before Fill.
             bottom.Controls.Add(searchRow);
 
@@ -327,13 +330,27 @@ namespace winstall
                 : (p.IsInstalled ? c.Text : c.DimText);
         }
 
+        // Borderless edit inside a 1px themed frame; border tints on focus.
+        private static Panel FrameFor(TextBox tb)
+        {
+            var frame = new Panel();
+            frame.Dock = DockStyle.Fill;
+            frame.Padding = new Padding(1);
+            frame.Tag = "frame";
+            tb.Dock = DockStyle.Fill;
+            frame.Controls.Add(tb);
+            tb.Enter += delegate { frame.BackColor = Theme.Current.FocusBorder; };
+            tb.Leave += delegate { frame.BackColor = Theme.Current.FrameBorder; };
+            return frame;
+        }
         private void FitColumns()
         {
             if (lv == null || colName == null) return;
-            int w = lv.ClientSize.Width - colVer.Width - colAct.Width
-                - SystemInformation.VerticalScrollBarWidth - 30;
-            if (w < 150) w = 150;
-            colName.Width = w;
+            // Columns span the full client width, including the zone under the
+            // scrollbar: with owner-drawn headers any gap would stay unpainted (white).
+            colName.Width = Math.Max(150, lv.ClientSize.Width - colVer.Width - 44);
+            // Every leftover pixel goes to the last column for the same reason.
+            colAct.Width = Math.Max(44, lv.ClientSize.Width - colName.Width - colVer.Width);
         }
 
         private void BuildHamburger()
@@ -395,6 +412,7 @@ namespace winstall
             hamburger.Items.Add(L.T("menu_about"), null, delegate { ShowAbout(); });
             hamburger.Items.Add(new ToolStripSeparator());
             hamburger.Items.Add(L.T("menu_exit"), null, delegate { Close(); });
+            Theme.PaintMenu(hamburger); // Rebuilds (e.g. on menu open) reset item colors.
         }
 
         /// <summary>Retranslates the UI, preserving checked rows.</summary>
@@ -609,23 +627,16 @@ namespace winstall
                 item.Tag = p;
                 item.Checked = false;
                 item.UseItemStyleForSubItems = false;
-                // One version per row: upgradable rows show the target version.
+                // MInstall-style single version: upgradable rows show the target version.
                 string ver = p.HasUpdate ? p.AvailableVersion
                     : (p.IsInstalled ? p.InstalledVersion : p.AvailableVersion);
-                var subVer = new ListViewItem.ListViewSubItem(item,
-                    string.IsNullOrWhiteSpace(ver) ? L.T("desc_na") : ver);
-                subVer.ForeColor = Color.MidnightBlue;
-                item.SubItems.Add(subVer);
-                var subAct = new ListViewItem.ListViewSubItem(item, p.HasUpdate ? "↑" : "");
-                subAct.ForeColor = SystemColors.GrayText;
-                item.SubItems.Add(subAct);
-                // Upgradable rows render bold.
+                item.SubItems.Add(string.IsNullOrWhiteSpace(ver) ? L.T("desc_na") : ver);
+                item.SubItems.Add("");
+                // Upgradable rows go bold.
                 if (p.HasUpdate)
                     item.Font = new Font(lv.Font, FontStyle.Bold);
-                // Found-but-not-installed rows render gray.
-                if (!p.IsInstalled)
-                    item.ForeColor = Color.DimGray;
                 lv.Items.Add(item);
+                PaintRow(item); // Single place that owns all row colors.
             }
             lv.EndUpdate();
             syncing = false;
