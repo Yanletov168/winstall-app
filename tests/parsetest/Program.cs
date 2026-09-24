@@ -101,7 +101,7 @@ class P {
         bool sameKeys = enMap.Count == ruMap.Count;
         if (sameKeys) foreach (var k in enMap.Keys) if (!ruMap.ContainsKey(k)) { sameKeys = false; break; }
         Check("en/ru key parity (" + enMap.Count + " keys)", sameKeys);
-        Check("unescape \\n", enMap["msg_no_winget"].Contains("\n") && !enMap["msg_no_winget"].Contains("\\n"));
+        Check("unescape \\n", enMap["msg_no_backend"].Contains("\n") && !enMap["msg_no_backend"].Contains("\\n"));
         Check("no empty ru values", CheckNoEmpty(ruMap));
         Check("fallback unknown key", L.T("no_such_key_xyz") == "no_such_key_xyz");
         Check("embedded fallback act", new PackageInfo().ActionFor(true) == PendingAction.Install && PackageInfo.ActionText(PendingAction.Upgrade) == "upgrade");
@@ -117,7 +117,36 @@ class P {
         bp2.Id = "ARP\\Machine\\X64\\LLVM"; bp2.UpgradeId = "LLVM.LLVM";
         Check("upgrade uses UpgradeId", WingetRunner.BuildArgs("upgrade", bp2).Contains("LLVM.LLVM") && !WingetRunner.BuildArgs("upgrade", bp2).Contains("ARP"));
 
-        // Scheduler task: full cycle (create, verify, delete).
+        // WINSTALL_WINGET override replaces detection entirely ("none" forces "no backend").
+        System.Environment.SetEnvironmentVariable("WINSTALL_WINGET", @"Z:\custom\winget.exe");
+        var forced = new System.Collections.Generic.List<string>(WingetRunner.CandidatePaths());
+        Check("override yields only itself", forced.Count == 1 && forced[0] == @"Z:\custom\winget.exe");
+        System.Environment.SetEnvironmentVariable("WINSTALL_WINGET", "none");
+        Check("none override yields nothing", new System.Collections.Generic.List<string>(WingetRunner.CandidatePaths()).Count == 0);
+        System.Environment.SetEnvironmentVariable("WINSTALL_WINGET", null);
+        Check("no candidates -> null",
+            WingetRunner.FirstExisting(new string[] { @"Z:\definitely\not\here\winget.exe", "", null }) == null);
+        bool hasAlias = false;
+        foreach (var c in WingetRunner.CandidatePaths())
+            if (c.EndsWith(@"Microsoft\WindowsApps\winget.exe", StringComparison.OrdinalIgnoreCase)) hasAlias = true;
+        Check("candidates include alias", hasAlias);
+
+        // Backend cache round-trip in an isolated dir (stale entries are ignored).
+        string bdir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "winstall-test-" + System.Guid.NewGuid().ToString("N"));
+        Backend.CacheDirOverride = bdir;
+        try
+        {
+            Backend.WriteCache(@"Z:\definitely\not\here\winget.exe");
+            Check("stale cache ignored", Backend.ReadCache() == null);
+            string self = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            Backend.WriteCache(self);
+            Check("cache roundtrip", Backend.ReadCache() == self);
+        }
+        finally
+        {
+            Backend.CacheDirOverride = null;
+            try { System.IO.Directory.Delete(bdir, true); } catch { }
+        }
         try { AutoCheck.Disable(); } catch { }
         Check("task initially off", !AutoCheck.IsEnabled());
         string enErr = AutoCheck.Enable();

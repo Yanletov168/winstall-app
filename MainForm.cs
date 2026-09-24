@@ -369,11 +369,21 @@ namespace winstall
         private async void RefreshAll()
         {
             if (busy) return;
-            string exe = WingetRunner.FindWinget();
+            string exe = Backend.ResolveExe();
             if (exe == null)
             {
-                MessageBox.Show(this, L.T("msg_no_winget"), L.T("msg_no_winget_t"),
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                var dr = MessageBox.Show(this, L.T("msg_no_backend"), L.T("msg_no_backend_t"),
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (dr == DialogResult.Yes)
+                {
+                    try { System.Diagnostics.Process.Start(Backend.DownloadPageUrl); }
+                    catch (Exception ex2)
+                    {
+                        MessageBox.Show(this, L.F("msg_err", ex2.Message), L.T("msg_err_t"),
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+                lblStatus.Text = L.T("status_no_backend");
                 return;
             }
 

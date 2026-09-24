@@ -205,6 +205,24 @@ namespace winstall
             if (n <= 0) return;
 
             string exe = Application.ExecutablePath;
+            ShowBalloon(
+                L.T("check_title"),
+                L.F("check_balloon", n),
+                delegate
+                {
+                    try { Process.Start(exe); }
+                    catch { }
+                });
+        }
+
+        public static void RunMissingNotify()
+        {
+            ShowBalloon(L.T("check_title"), L.T("check_missing"), null);
+        }
+
+        private static void ShowBalloon(string title, string text, Action onClick)
+        {
+            string exe = Application.ExecutablePath;
             Icon icon = null;
             try { icon = Icon.ExtractAssociatedIcon(exe); }
             catch { }
@@ -213,14 +231,14 @@ namespace winstall
                 ni.Icon = icon ?? SystemIcons.Information;
                 ni.Text = "winstall";
                 ni.Visible = true;
-                ni.BalloonTipTitle = L.T("check_title");
-                ni.BalloonTipText = L.F("check_balloon", n);
+                ni.BalloonTipTitle = title;
+                ni.BalloonTipText = text;
                 ni.BalloonTipIcon = ToolTipIcon.Info;
                 using (var done = new ManualResetEvent(false))
                 {
                     ni.BalloonTipClicked += delegate
                     {
-                        try { Process.Start(exe); }
+                        try { if (onClick != null) onClick(); }
                         catch { }
                         done.Set();
                     };

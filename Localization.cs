@@ -300,8 +300,10 @@ namespace winstall
             embeddedEn["status_type_query"] = "Type a query in the search box below \u2014 it searches the whole winget database.";
             embeddedEn["status_removing"] = "Removing: {0}\u2026";
             embeddedEn["status_installing"] = "Installing fresh: {0}\u2026";
-            embeddedEn["msg_no_winget_t"] = "No winget";
-            embeddedEn["msg_no_winget"] = "winget.exe was not found.\n\nWindows 10 IoT Enterprise LTSC 21H2 has no Store, so install App Installer manually:\ndownload the .msixbundle from github.com/microsoft/winget-cli/releases\nand install it via Add-AppxPackage.";
+            embeddedEn["msg_no_backend_t"] = "WinGet not found";
+            embeddedEn["msg_no_backend"] = "No system-wide WinGet was found.\n\nwinstall is a frontend and needs the Windows Package Manager to work.\n\nPress Yes to open the official download page (App Installer), install it, then restart winstall.";
+            embeddedEn["status_no_backend"] = "WinGet not found. Install App Installer, then restart winstall.";
+            embeddedEn["check_missing"] = "WinGet is not installed, updates cannot be checked.";
             embeddedEn["msg_err_t"] = "Error";
             embeddedEn["msg_winget_err"] = "winget error:\n{0}";
             embeddedEn["msg_err"] = "Error:\n{0}";

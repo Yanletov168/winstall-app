@@ -17,6 +17,11 @@ namespace winstall
                 if (a.Equals(AutoCheck.CheckArg, StringComparison.OrdinalIgnoreCase))
                 {
                     L.Startup();
+                    if (Backend.ResolveExe() == null)
+                    {
+                        AutoCheck.RunMissingNotify();
+                        return;
+                    }
                     AutoCheck.RunCheckAndNotify();
                     return;
                 }

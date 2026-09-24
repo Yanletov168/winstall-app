@@ -34,9 +34,18 @@ jobs:
             dotnet publish winstall.csproj -c Release -f net8.0-windows -r $rid --self-contained true `
               /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:DebugType=none `
               /p:Version=$env:VERSION --nologo -v q -o "dist\$rid"
-            Compress-Archive -Path "dist\$rid\*" `
-              -DestinationPath "release-pkg\winstall-portable-$rid.zip" -Force
           }
+
+      - name: Stage universal portable (3 binaries, shared locales)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-pkg\stage -Force
+          Copy-Item dist\win-x86\winstall.exe release-pkg\stage\winstall-x86.exe
+          Copy-Item dist\win-x64\winstall.exe release-pkg\stage\winstall-x64.exe
+          Copy-Item dist\win-arm64\winstall.exe release-pkg\stage\winstall-arm64.exe
+          Copy-Item locales release-pkg\stage\locales -Recurse -Force
+          Compress-Archive -Path release-pkg\stage\* `
+            -DestinationPath release-pkg\winstall-portable.zip -Force
 
       - name: Install Inno Setup
         shell: pwsh

@@ -1,104 +1,146 @@
 # winstall
 
-Простой менеджер пакетов winget в духе MInstall. Один exe, одно окно, один список —
-никаких вкладок, анимаций и лишних рантаймов.
+English | [Русский](README.ru.md)
 
-> **English:** a minimal MInstall-style GUI for winget. Single exe, single window,
-> single list — no tabs, no animations, no extra runtimes.
+winstall is a lightweight native Windows GUI for the Windows Package Manager (winget).
+It stays a thin frontend: every package operation goes through the system-wide
+winget, nothing is reimplemented. Built primarily for Windows 10, including 21H2;
+Windows 11 and newer work through compatibility.
 
-![icon](icon.png)
+## Features
 
-## Возможности
+- Single checklist window: installed apps, with updatable ones pinned in bold on top.
+- Checkbox semantics: updatable upgrades (↑), current uninstalls (×), new search
+  results install (+). The glyph column always shows the pending action.
+- Search across the whole winget catalog; three views: Installed, Updates, Search.
+- Native display names and icons resolved from Uninstall registry entries.
+- Details pane with publisher and description from `winget show`.
+- Update-all in one click; package list export and import.
+- Automatic reinstall offer when winget refuses an upgrade over changed
+  installer technology (`0x8A15008E`).
+- Optional update checker (logon autostart + wake task) with a count-only
+  tray balloon; clicking it opens winstall.
+- UI localizations via `locales/*.json` (English, Russian); a new language
+  is one file, picked from the ☰ menu.
 
-- Один список вместо страниц: установленные программы, обновляемые — наверху жирным.
-- Динамическая галочка: у обновляемого — **обновить** (↑), у свежего — **удалить** (×),
-  у найденного в поиске — **установить** (+). Колонка `✦` сразу показывает действие.
-- Поиск по всей базе winget прямо из верхней строки; категории:
-  `УСТАНОВЛЕННЫЕ` / `ТРЕБУЮТ ОБНОВЛЕНИЯ` / `ПОИСК` (переключается сам).
-- Нативные имена и иконки из реестра вместо голых ID (`Steam`, а не `Valve.Steam`).
-- Карточка программы: издатель и описание из `winget show`.
-- `Обновить всё` в один клик, экспорт/импорт списка (`winget export/import`) через меню ☰.
-- Переустановка в один шаг, если winget отказался обновлять из-за смены
-  технологии установщика (код `0x8A15008E`, проверено на LLVM).
-- Автопроверка обновлений без службы и без админа: автозапуск при входе +
-  задача на пробуждение, баллун «Доступно обновлений: N» без списка программ.
-- Локализация через `locales/*.json` (в базе русский и английский),
-  новый язык — просто положить файл, выбор в меню ☰.
+## Installation
 
-Целевая платформа: **Windows 10 IoT Enterprise LTSC 21H2**, работает из коробки
-на встроенном .NET Framework 4.8.
+### Installer
 
-## Быстрый старт
+`Setup-winstall-x64.exe`, `Setup-winstall-x86.exe`, `Setup-winstall-arm64.exe`
+from [Releases](https://github.com/Yanletov168/winstall-app/releases).
+Per-user install, no UAC for the app itself.
 
-Файлы лежат в [Releases](https://github.com/Yanletov168/winstall-app/releases)
-(исходники каждого релиза GitHub прикладывает сам: `Source code (zip)`).
+At the end of setup the installer checks for a system-wide WinGet. If it is
+already there, nothing else happens. If it is missing, setup asks for explicit
+consent and then downloads the official App Installer from Microsoft and
+installs it — that step shows its own UAC prompt. Errors are reported, never
+hidden. Without WinGet the app cannot work: it never ships its own package
+manager (see Compatibility).
 
-| Файл | Для кого |
-|---|---|
-| `Setup-winstall-x64.exe` | Установщик, Windows 10/11 64-bit |
-| `Setup-winstall-x86.exe` | Установщик, Windows 32-bit |
-| `Setup-winstall-arm64.exe` | Установщик, Windows ARM64 (нативно) |
-| `winstall-portable-net48.zip` | Portable для LTSC без рантаймов (~100 КБ: exe + переводы) |
-| `winstall-portable-win-x64.zip` | Portable .NET 8 self-contained, 64-bit |
-| `winstall-portable-win-x86.zip` | Portable .NET 8 self-contained, 32-bit |
-| `winstall-portable-win-arm64.zip` | Portable .NET 8 self-contained, ARM64 |
+### Portable
 
-Установщики per-user (без UAC): кладут программу, ярлык в меню Пуск,
-деинсталлятор в «Программы и компоненты». Нативного ARM64 у .NET Framework 4.8
-не бывает — ARM64-сборки едут на .NET 8 self-contained (рантайм внутри,
-ставить ничего не надо).
+`winstall-portable.zip` from
+[Releases](https://github.com/Yanletov168/winstall-app/releases):
 
-> На IoT LTSC нет Store и winget по умолчанию: скачай `.msixbundle` со страницы
-> [winget-cli/releases](https://github.com/microsoft/winget-cli/releases)
-> и поставь через `Add-AppxPackage`.
+```text
+winstall-x86.exe
+winstall-x64.exe
+winstall-arm64.exe
+locales/
+  en.json
+  ru.json
+```
 
-## Сборка из исходников
+Pick the exe for the machine, no install needed. All three binaries share the
+single `locales/` directory next to them; running without it falls back to
+built-in English. A tiny framework-dependent build for machines without
+.NET 8 is published separately as `winstall-portable-net48.zip` (needs the
+in-box .NET Framework 4.8).
 
-Нужен .NET SDK 8+ (ставить рантайм на целевую машину **не** надо —
-программа едет на встроенном .NET Framework 4.8):
+## Compatibility
+
+Primary target: **Windows 10 21H2 and newer** (x64/x86). Windows 11 and newer
+releases are supported through compatibility, not as the primary platform.
+ARM64 builds target Windows 10/11 on ARM64. Installers refuse anything below
+Windows 10. The .NET 8 builds are self-contained and carry their runtime;
+the net48 build uses the in-box .NET Framework 4.8.
+
+WinGet itself requires Windows 10 1809 or newer.
+
+### Portable behavior / WinGet fallback
+
+Portable builds need a system-wide WinGet. On first launch winstall probes
+once (PATH plus the App Installer alias) and caches a working location in
+`backend.txt` next to the exe (AppData fallback). A missing backend is
+re-probed on every launch, so installing App Installer later just works, and
+a backend that fails at runtime invalidates the cache and is re-detected once.
+If no backend is found, the app shows a guidance dialog linking to the
+official download page instead of failing silently.
+
+There is intentionally no bundled WinGet fallback: `winget.exe` alone does
+not work — it needs the registered App Installer package (MSIX identity and
+COM server), and running it outside the official distribution is unsupported
+by Microsoft. Shipping a fake fallback was deliberately avoided; the
+installer path above (download + register the official App Installer) is the
+supported way to get WinGet on a machine that lacks it.
+
+## Usage
+
+- Check an updatable row to upgrade it, a current row to remove it
+  (with confirmation), a search result to install it. Then `▶ Run`.
+- `Update all (N)` runs a single `winget upgrade --all --silent`.
+- The ☰ menu holds export/import, bulk selection, the update checker toggle,
+  language selection and the winget log folder.
+- `winstall.exe --check-updates` is the quiet mode used by the checker:
+  no window, balloon on updates, silent exit otherwise.
+
+## Building from source
+
+.NET SDK 8 or newer. No runtime needs to be installed on the target machine.
 
 ```bat
 dotnet build winstall.csproj -c Release
 ```
 
-Готовый exe: `bin\Release\net48\winstall.exe` (~70 КБ, иконка вшита).
-Рядом должны лежать `locales\en.json` и `locales\ru.json`
-(копируются в выходной каталог автоматически).
+Self-contained per-architecture publish:
 
-Тесты (парсинг вывода winget, локализации, цикл задачи планировщика):
+```bat
+dotnet publish winstall.csproj -c Release -f net8.0-windows -r win-x64 --self-contained true /p:PublishSingleFile=true
+```
+
+Installers need [Inno Setup 6](https://jrsoftware.org/isinfo.php):
+
+```bat
+iscc /DMyArch=x64 /DMyVersion=1.1.0 /DSrcDir=..\dist\win-x64 /DOutDir=..\dist-installer installer\winstall.iss
+```
+
+Checks (table parsing, localizations, scheduler task cycle, backend cache):
 
 ```bat
 dotnet run --project tests\parsetest\parsetest.csproj
 ```
 
-## Использование
+## Technical notes
 
-- Галочка у обновляемого = обновить, у свежего = удалить (с подтверждением),
-  у нового из поиска = установить. Затем `▶ Выполнить`.
-- `Обновить всё (N)` — один вызов `winget upgrade --all --silent`.
-- Меню ☰: экспорт/импорт списка, выбор обновляемых, снятие галочек,
-  автопроверка, язык, логи winget.
-- Тихий режим для планировщика: `winstall.exe --check-updates`.
+- winget speaks in tables; columns split on 2+ spaces. `winget list` ships in
+  two layouts (with and without an Available column) and both are parsed.
+- Apps installed outside winget show up as sourceless ARP rows; they are
+  correlated with catalog entries by exact name and upgraded by the linked id.
+- `uninstall` accepts no `--accept-package-agreements`; passing it makes
+  winget print usage and exit `0x8A150002`.
+- schtasks output is read in the console OEM code page; `/TR` quoting is
+  argv-escaped so paths with spaces survive.
+- Power users can pin the backend explicitly with the `WINSTALL_WINGET`
+  environment variable (a path, or `none` to force the no-backend path).
+- The update checker deliberately avoids admin rights: logon via the HKCU Run
+  key, wake via an ONEVENT scheduler task (Power-Troubleshooter ID 1).
+  ONLOGON triggers and XML task imports require elevation and are not used.
 
-## Структура
+## License
 
-| Файл | Что делает |
-|---|---|
-| `Program.cs` | Точка входа, тихий режим `--check-updates` |
-| `MainForm.cs` | Весь UI в коде (стиль MInstall, Win32) |
-| `WingetRunner.cs` | Запуск `winget.exe` в UTF-8, парсинг таблиц |
-| `IconProvider.cs` | Иконки из реестра Uninstall |
-| `AutoCheck.cs` | Автозапуск (Run) + задача на пробуждение (ONEVENT) + баллун |
-| `Localization.cs` | Локализация через JSON рядом с exe |
-| `Models.cs` | `PackageInfo`, логика действия галочки |
-| `locales/` | `en.json`, `ru.json` |
-| `tests/parsetest/` | Самопроверки (линкуют исходники, без копий) |
-| `icon.png` / `icon.ico` | Иконка (исходник + собранная для exe) |
+MIT — see [LICENSE](LICENSE).
 
-## Лицензия
+## Development
 
-MIT — см. [LICENSE](LICENSE).
-
-## Авторы
-
-Yanletov168 — совместно с [OpenCode](https://opencode.ai) / Meta Muse Spark 1.3.
+Development of this project was assisted by OpenCode with Meta Muse Spark 1.3.

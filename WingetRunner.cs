@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -35,77 +36,119 @@ namespace winstall
 
         private static readonly Regex Split2Plus = new Regex(@"\s{2,}", RegexOptions.Compiled);
 
-        public static string FindWinget()
+        internal static IEnumerable<string> CandidatePaths()
         {
-            // PATH lookup first.
+            // Explicit backend selection replaces detection entirely.
+            // "none" forces the no-backend path (used to test it).
+            string forced = Environment.GetEnvironmentVariable("WINSTALL_WINGET");
+            if (forced != null)
+            {
+                if (!string.IsNullOrWhiteSpace(forced) &&
+                    !forced.Trim().Equals("none", StringComparison.OrdinalIgnoreCase))
+                    yield return forced.Trim();
+                yield break;
+            }
+            var paths = new List<string>();
             try
             {
-                var r = new Process();
-                r.StartInfo.FileName = "where.exe";
-                r.StartInfo.Arguments = "winget";
-                r.StartInfo.UseShellExecute = false;
-                r.StartInfo.RedirectStandardOutput = true;
-                r.StartInfo.CreateNoWindow = true;
-                r.Start();
-                string o = r.StandardOutput.ReadToEnd();
-                r.WaitForExit(5000);
-                foreach (var line in o.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                using (var r = new Process())
                 {
-                    string p = line.Trim();
-                    if (p.EndsWith("winget.exe", StringComparison.OrdinalIgnoreCase) && File.Exists(p))
-                        return p;
+                    r.StartInfo.FileName = "where.exe";
+                    r.StartInfo.Arguments = "winget";
+                    r.StartInfo.UseShellExecute = false;
+                    r.StartInfo.RedirectStandardOutput = true;
+                    r.StartInfo.CreateNoWindow = true;
+                    r.Start();
+                    string o = r.StandardOutput.ReadToEnd();
+                    r.WaitForExit(5000);
+                    foreach (var line in o.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string p = line.Trim();
+                        if (p.EndsWith("winget.exe", StringComparison.OrdinalIgnoreCase))
+                            paths.Add(p);
+                    }
                 }
             }
             catch { }
-
-            // Default App Installer location.
+            foreach (var p in paths) yield return p;
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string cand = Path.Combine(local, @"Microsoft\WindowsApps\winget.exe");
-            if (File.Exists(cand)) return cand;
+            yield return Path.Combine(local, @"Microsoft\WindowsApps\winget.exe");
+        }
+
+        internal static string FirstExisting(IEnumerable<string> candidates)
+        {
+            foreach (var p in candidates)
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(p) && File.Exists(p)) return p;
+                }
+                catch { }
+            }
             return null;
+        }
+
+        public static string FindWinget()
+        {
+            try { return FirstExisting(CandidatePaths()); }
+            catch { return null; }
         }
 
         public static Task<WingetResult> RunAsync(string args, int timeoutMs = DefaultTimeoutMs)
         {
             return Task.Run(() =>
             {
-                var res = new WingetResult();
-                string exe = FindWinget() ?? "winget";
-                var psi = new ProcessStartInfo(exe, args);
-                psi.UseShellExecute = false;
-                psi.RedirectStandardOutput = true;
-                psi.RedirectStandardError = true;
-                psi.CreateNoWindow = true;
-                psi.StandardOutputEncoding = Encoding.UTF8;
-                psi.StandardErrorEncoding = Encoding.UTF8;
-                // Unattended operation requires non-interactive winget.
-                psi.EnvironmentVariables["WINGET_DISABLE_INTERACTIVITY"] = "1";
-
-                var sbOut = new StringBuilder();
-                var sbErr = new StringBuilder();
-                using (var p = new Process())
+                string exe = Backend.ResolveExe() ?? "winget";
+                try
                 {
-                    p.StartInfo = psi;
-                    p.OutputDataReceived += (s, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
-                    p.ErrorDataReceived += (s, e) => { if (e.Data != null) sbErr.AppendLine(e.Data); };
-                    p.Start();
-                    p.BeginOutputReadLine();
-                    p.BeginErrorReadLine();
-                    bool exited = p.WaitForExit(timeoutMs);
-                    if (!exited)
-                    {
-                        try { p.Kill(); } catch { }
-                        res.ExitCode = -1;
-                    }
-                    else
-                    {
-                        res.ExitCode = p.ExitCode;
-                    }
+                    return RunOnce(exe, args, timeoutMs);
                 }
-                res.StdOut = sbOut.ToString();
-                res.StdErr = sbErr.ToString();
-                return res;
+                catch (Win32Exception)
+                {
+                    // Cached backend binary is gone; re-detect once and retry.
+                    Backend.Invalidate();
+                    return RunOnce(Backend.ResolveExe() ?? "winget", args, timeoutMs);
+                }
             });
+        }
+
+        private static WingetResult RunOnce(string exe, string args, int timeoutMs)
+        {
+            var res = new WingetResult();
+            var psi = new ProcessStartInfo(exe, args);
+            psi.UseShellExecute = false;
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+            psi.CreateNoWindow = true;
+            psi.StandardOutputEncoding = Encoding.UTF8;
+            psi.StandardErrorEncoding = Encoding.UTF8;
+            // Unattended operation requires non-interactive winget.
+            psi.EnvironmentVariables["WINGET_DISABLE_INTERACTIVITY"] = "1";
+
+            var sbOut = new StringBuilder();
+            var sbErr = new StringBuilder();
+            using (var p = new Process())
+            {
+                p.StartInfo = psi;
+                p.OutputDataReceived += (s, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
+                p.ErrorDataReceived += (s, e) => { if (e.Data != null) sbErr.AppendLine(e.Data); };
+                p.Start();
+                p.BeginOutputReadLine();
+                p.BeginErrorReadLine();
+                bool exited = p.WaitForExit(timeoutMs);
+                if (!exited)
+                {
+                    try { p.Kill(); } catch { }
+                    res.ExitCode = -1;
+                }
+                else
+                {
+                    res.ExitCode = p.ExitCode;
+                }
+            }
+            res.StdOut = sbOut.ToString();
+            res.StdErr = sbErr.ToString();
+            return res;
         }
 
         // winget table parsing: columns are separated by 2+ spaces.
