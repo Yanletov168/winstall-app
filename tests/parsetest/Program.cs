@@ -290,6 +290,11 @@ class P {
                         throw new Exception("header not dark in " + m + " (R=" + h.R + ")");
                     if (!expectDark && h.R < 180)
                         throw new Exception("header not light in " + m + " (R=" + h.R + ")");
+                    double mean = MeanBrightness(f.CaptureForm());
+                    if (expectDark && mean > 110)
+                        throw new Exception("form not dark in " + m + " (mean=" + (int)mean + ")");
+                    if (!expectDark && mean < 140)
+                        throw new Exception("form not light in " + m + " (mean=" + (int)mean + ")");
                 }
                 f.Close();
             }
@@ -300,5 +305,22 @@ class P {
             Options.Reset();
             try { System.IO.Directory.Delete(tdir, true); } catch { }
         }
+    }
+
+    static double MeanBrightness(System.Drawing.Bitmap bmp)
+    {
+        long sum = 0;
+        long n = 0;
+        using (bmp)
+        {
+            for (int y = 0; y < bmp.Height; y += 11)
+                for (int x = 0; x < bmp.Width; x += 11)
+                {
+                    System.Drawing.Color px = bmp.GetPixel(x, y);
+                    sum += (px.R + px.G + px.B) / 3;
+                    n++;
+                }
+        }
+        return n == 0 ? 0 : (double)sum / n;
     }
 }

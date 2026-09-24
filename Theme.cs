@@ -30,6 +30,8 @@ namespace winstall
             public Color MenuText;
             public Color MenuBorder;
             public Color MenuSelected;
+            public Color ButtonHover;
+            public Color ButtonDown;
         }
 
         public static readonly Palette Light = new Palette
@@ -48,7 +50,9 @@ namespace winstall
             MenuBg = SystemColors.Window,
             MenuText = SystemColors.WindowText,
             MenuBorder = SystemColors.ControlDark,
-            MenuSelected = SystemColors.Highlight
+            MenuSelected = SystemColors.Highlight,
+            ButtonHover = SystemColors.ControlLight,
+            ButtonDown = SystemColors.ControlDark
         };
 
         public static readonly Palette Dark = new Palette
@@ -67,7 +71,9 @@ namespace winstall
             MenuBg = Color.FromArgb(0x2B, 0x2B, 0x2B),
             MenuText = Color.FromArgb(0xF5, 0xF5, 0xF5),
             MenuBorder = Color.FromArgb(0x50, 0x50, 0x50),
-            MenuSelected = Color.FromArgb(0x40, 0x40, 0x40)
+            MenuSelected = Color.FromArgb(0x40, 0x40, 0x40),
+            ButtonHover = Color.FromArgb(0x45, 0x45, 0x45),
+            ButtonDown = Color.FromArgb(0x33, 0x33, 0x33)
         };
 
         public static Palette Current { get; private set; } = Light;
@@ -96,27 +102,63 @@ namespace winstall
         public static void Apply(Form form, ContextMenuStrip menu, bool dark)
         {
             Current = dark ? Dark : Light;
-            Paint(form, Current);
+            Paint(form, Current, dark);
             if (menu != null)
             {
                 menu.Renderer = dark
                     ? (ToolStripRenderer)new ToolStripProfessionalRenderer(new DarkTable(Current))
                     : (ToolStripRenderer)new ToolStripProfessionalRenderer();
+                menu.BackColor = Current.MenuBg;
+                menu.ForeColor = Current.MenuText;
+                PaintMenuItems(menu.Items, Current);
             }
+            DarkScrollBars(form, dark);
             SetTitleBarDark(form, dark);
         }
 
-        private static void Paint(Control x, Palette c)
+        private static void PaintMenuItems(ToolStripItemCollection items, Palette c)
+        {
+            foreach (ToolStripItem it in items)
+            {
+                it.BackColor = c.MenuBg;
+                it.ForeColor = c.MenuText;
+                if (it is ToolStripMenuItem mi) PaintMenuItems(mi.DropDownItems, c);
+            }
+        }
+
+        private static void Paint(Control x, Palette c, bool dark)
         {
             if (x is TextBox) { x.BackColor = c.Window; x.ForeColor = c.Text; }
-            else if (x is Button) { x.BackColor = c.Control; x.ForeColor = c.Text; }
-            else if (x is ComboBox) { x.BackColor = c.Window; x.ForeColor = c.Text; }
+            else if (x is Button b)
+            {
+                b.ForeColor = c.Text;
+                if (dark)
+                {
+                    b.FlatStyle = FlatStyle.Flat;
+                    b.BackColor = c.Control;
+                    b.FlatAppearance.BorderColor = c.MenuBorder;
+                    b.FlatAppearance.BorderSize = 1;
+                    b.FlatAppearance.MouseOverBackColor = c.ButtonHover;
+                    b.FlatAppearance.MouseDownBackColor = c.ButtonDown;
+                }
+                else
+                {
+                    b.FlatStyle = FlatStyle.Standard;
+                    b.BackColor = c.Control;
+                }
+            }
+            else if (x is ComboBox cb)
+            {
+                cb.BackColor = c.Window;
+                cb.ForeColor = c.Text;
+                cb.FlatStyle = dark ? FlatStyle.Flat : FlatStyle.Standard;
+            }
             else if (x is CheckBox) { x.ForeColor = c.Text; }
             else if (x is ListView) { x.BackColor = c.Window; x.ForeColor = c.Text; }
             else if (x is StatusStrip) { x.BackColor = c.Control; x.ForeColor = c.Text; }
             else if (x is Label lb) { lb.ForeColor = Equals(lb.Tag, "muted") ? c.GrayText : c.Text; }
             else if (x is Panel || x is Form) { x.BackColor = c.FormBg; x.ForeColor = c.Text; }
-            foreach (Control ch in x.Controls) Paint(ch, c);
+            foreach (Control ch in x.Controls) Paint(ch, c, dark);
             if (x is StatusStrip ss)
                 foreach (ToolStripItem it in ss.Items) it.ForeColor = c.Text;
         }
@@ -164,6 +206,26 @@ namespace winstall
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+        private static extern int SetWindowTheme(IntPtr hwnd, string appName, string idList);
+
+        // Dark Explorer scrollbars on 1809+; silently ignored elsewhere.
+        private static void DarkScrollBars(Control x, bool dark)
+        {
+            try
+            {
+                if (x.IsHandleCreated && (x is ListView || x is TextBox || x is ComboBox))
+                {
+                    if (dark)
+                        SetWindowTheme(x.Handle, "DarkMode_Explorer", null);
+                    else
+                        SetWindowTheme(x.Handle, null, null);
+                }
+            }
+            catch { }
+            foreach (Control ch in x.Controls) DarkScrollBars(ch, dark);
+        }
 
         private static void SetTitleBarDark(Form form, bool dark)
         {

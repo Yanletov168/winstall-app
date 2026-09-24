@@ -21,7 +21,8 @@ Windows 11 and newer work through compatibility.
 - Optional update checker (logon autostart + wake task) with a count-only
   tray balloon; clicking it opens winstall.
 - UI localizations via `locales/*.json` (English, Russian); a new language
-  is one file, picked from the ☰ menu.
+  is one file, picked from the ☰ menu. Keep the exe and `locales/` from the
+  same release: unknown keys fall back to English one by one.
 - Light, dark and system-following theme, also from the ☰ menu.
 
 ## Installation

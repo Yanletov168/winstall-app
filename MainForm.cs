@@ -280,6 +280,14 @@ namespace winstall
 
         internal int RowCount { get { return lv.Items.Count; } }
 
+        // Test seam: full client-area bitmap for theme verification.
+        internal Bitmap CaptureForm()
+        {
+            var bmp = new Bitmap(ClientSize.Width, ClientSize.Height);
+            DrawToBitmap(bmp, new Rectangle(Point.Empty, bmp.Size));
+            return bmp;
+        }
+
         // Test seam: average color of the list header area for theme verification.
         internal Color SampleHeaderColor()
         {
