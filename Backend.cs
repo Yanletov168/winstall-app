@@ -14,8 +14,6 @@ namespace winstall
     {
         public const string DownloadPageUrl = "https://github.com/microsoft/winget-cli/releases/latest";
 
-        internal static string CacheDirOverride { get; set; }
-
         private static bool probed;
         private static string exe;
 
@@ -23,10 +21,18 @@ namespace winstall
         {
             if (probed) return exe;
             probed = true;
-            exe = ReadCache();
-            if (exe != null) return exe;
-            exe = WingetRunner.FindWinget();
-            if (exe != null) WriteCache(exe);
+            exe = Options.WingetPath;
+            // Empty and stale entries both mean "unknown": detect live.
+            if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe)) exe = null;
+            if (exe == null)
+            {
+                exe = WingetRunner.FindWinget();
+                if (exe != null)
+                {
+                    Options.WingetPath = exe;
+                    Options.Save();
+                }
+            }
             return exe;
         }
 
@@ -34,54 +40,8 @@ namespace winstall
         {
             probed = false;
             exe = null;
-            foreach (var p in CacheFiles())
-            {
-                try { if (File.Exists(p)) File.Delete(p); } catch { }
-            }
-        }
-
-        private static string[] CacheFiles()
-        {
-            if (!string.IsNullOrWhiteSpace(CacheDirOverride))
-                return new string[] { Path.Combine(CacheDirOverride, "backend.txt") };
-            return new string[]
-            {
-                Path.Combine(L.ExeDir, "backend.txt"),
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "winstall", "backend.txt")
-            };
-        }
-
-        internal static string ReadCache()
-        {
-            foreach (var p in CacheFiles())
-            {
-                try
-                {
-                    if (!File.Exists(p)) continue;
-                    string[] lines = File.ReadAllLines(p);
-                    if (lines.Length >= 2 && lines[0].Trim() == "system" && File.Exists(lines[1].Trim()))
-                        return lines[1].Trim();
-                }
-                catch { }
-            }
-            return null;
-        }
-
-        internal static void WriteCache(string path)
-        {
-            string content = "system" + "\r\n" + path + "\r\n";
-            foreach (var p in CacheFiles())
-            {
-                try
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(p));
-                    File.WriteAllText(p, content);
-                    return;
-                }
-                catch { }
-            }
+            Options.WingetPath = "";
+            Options.Save();
         }
     }
 }

@@ -94,6 +94,9 @@ supported way to get WinGet on a machine that lacks it.
   language selection and the winget log folder.
 - `winstall.exe --check-updates` is the quiet mode used by the checker:
   no window, balloon on updates, silent exit otherwise.
+- Settings live in `options.ini` next to the exe (UI language, cached backend
+  path, installer log folder, silent mode). The ☰ menu edits language, log
+  folder and silent mode; the backend entry is maintained automatically.
 
 ## Building from source
 

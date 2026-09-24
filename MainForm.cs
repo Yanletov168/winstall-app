@@ -271,8 +271,29 @@ namespace winstall
             mAuto.Checked = autoCheckEnabled;
             mAuto.Click += delegate { ToggleAutoCheck(); };
             hamburger.Items.Add(mAuto);
+            var mSilent = new ToolStripMenuItem(L.T("menu_silent"));
+            mSilent.Checked = Options.Silent;
+            mSilent.Click += delegate
+            {
+                Options.Silent = !Options.Silent;
+                Options.Save();
+            };
+            hamburger.Items.Add(mSilent);
             hamburger.Items.Add(new ToolStripSeparator());
             hamburger.Items.Add(L.T("menu_logs"), null, delegate { OpenWingetLogs(); });
+            var mLogsDir = new ToolStripMenuItem(L.T("menu_logsdir"));
+            mLogsDir.Click += delegate { ChooseLogsDir(); };
+            hamburger.Items.Add(mLogsDir);
+            if (!string.IsNullOrWhiteSpace(Options.LogsDir))
+            {
+                var mLogsDef = new ToolStripMenuItem(L.T("menu_logs_default"));
+                mLogsDef.Click += delegate
+                {
+                    Options.LogsDir = "";
+                    Options.Save();
+                };
+                hamburger.Items.Add(mLogsDef);
+            }
             var mLang = new ToolStripMenuItem(L.T("menu_lang"));
             foreach (var li in L.Available)
             {
@@ -784,14 +805,18 @@ namespace winstall
             }
 
             lblStatus.Text = L.F("status_removing", pkg.DisplayName);
-            var u = await WingetRunner.RunAsync(WingetRunner.BuildArgs("uninstall", pkg), WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
+            var u = await WingetRunner.RunAsync(
+                WingetRunner.BuildArgs("uninstall", pkg, Options.LogsDir, Options.Silent),
+                WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             if (u.ExitCode != 0 && !string.IsNullOrWhiteSpace(pkg.UpgradeId))
             {
                 // The list id didn't uninstall; retry with the winget id.
                 var alt = new PackageInfo();
                 alt.Id = pkg.UpgradeId;
                 alt.Name = pkg.Name;
-                u = await WingetRunner.RunAsync(WingetRunner.BuildArgs("uninstall", alt), WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
+                u = await WingetRunner.RunAsync(
+                    WingetRunner.BuildArgs("uninstall", alt, Options.LogsDir, Options.Silent),
+                    WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             }
             if (u.ExitCode != 0)
             {
@@ -807,7 +832,9 @@ namespace winstall
             var ins = new PackageInfo();
             ins.Id = pkg.EffectiveUpgradeId;
             ins.Name = pkg.Name;
-            var ir = await WingetRunner.RunAsync(WingetRunner.BuildArgs("install", ins), WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
+            var ir = await WingetRunner.RunAsync(
+                WingetRunner.BuildArgs("install", ins, Options.LogsDir, Options.Silent),
+                WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
             bool good = ir.ExitCode == 0;
             log.AppendLine(L.F("log_reinstall", good ? "OK" : "FAIL", pkg.DisplayName, ir.ExitCode));
             if (!good)
@@ -853,7 +880,7 @@ namespace winstall
                     string verb = job.Value == PendingAction.Install ? "install" :
                                   job.Value == PendingAction.Upgrade ? "upgrade" : "uninstall";
                     lblStatus.Text = string.Format("{0}: {1}…", PackageInfo.ActionText(job.Value), pkg.DisplayName);
-                    string args = WingetRunner.BuildArgs(verb, pkg);
+                    string args = WingetRunner.BuildArgs(verb, pkg, Options.LogsDir, Options.Silent);
                     var r = await WingetRunner.RunAsync(args, WingetRunner.OperationTimeoutMs).ConfigureAwait(true);
                     bool good = r.ExitCode == 0;
                     if (!good && job.Value == PendingAction.Upgrade && IsTechnologyDiffers(r))
@@ -917,9 +944,10 @@ namespace winstall
             try
             {
                 // One call upgrades everything; cheaper than per-package runs.
-                var r = await WingetRunner.RunAsync(
-                    "upgrade --all --silent --accept-package-agreements --accept-source-agreements --disable-interactivity",
-                    WingetRunner.BulkTimeoutMs).ConfigureAwait(true);
+                string silent = Options.Silent ? " --silent" : "";
+                string args = "upgrade --all --accept-package-agreements --accept-source-agreements --disable-interactivity"
+                    + silent + WingetRunner.BuildLogArg("upgrade", "all", Options.LogsDir);
+                var r = await WingetRunner.RunAsync(args, WingetRunner.BulkTimeoutMs).ConfigureAwait(true);
                 bool good = r.ExitCode == 0;
                 string tail = (r.StdOut + "\n" + r.StdErr).Trim();
                 if (tail.Length > WingetRunner.MaxBulkOutputTail) tail = tail.Substring(tail.Length - WingetRunner.MaxBulkOutputTail);
@@ -1090,10 +1118,44 @@ namespace winstall
             }
         }
 
+        private void ChooseLogsDir()
+        {
+            if (busy) return;
+            using (var dlg = new FolderBrowserDialog())
+            {
+                dlg.Description = L.T("dlg_logsdir");
+                dlg.ShowNewFolderButton = true;
+                try
+                {
+                    dlg.SelectedPath = string.IsNullOrWhiteSpace(Options.LogsDir)
+                        ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                        : Options.LogsDir;
+                }
+                catch { }
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                try { System.IO.Directory.CreateDirectory(dlg.SelectedPath); }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, L.F("msg_err", ex.Message), L.T("msg_err_t"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                Options.LogsDir = dlg.SelectedPath;
+                Options.Save();
+                lblStatus.Text = L.F("status_logsdir", dlg.SelectedPath);
+            }
+        }
+
         private void OpenWingetLogs()
         {
             try
             {
+                if (!string.IsNullOrWhiteSpace(Options.LogsDir) &&
+                    System.IO.Directory.Exists(Options.LogsDir))
+                {
+                    System.Diagnostics.Process.Start(Options.LogsDir);
+                    return;
+                }
                 string dir = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     @"Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir");

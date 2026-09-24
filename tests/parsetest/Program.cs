@@ -131,22 +131,69 @@ class P {
             if (c.EndsWith(@"Microsoft\WindowsApps\winget.exe", StringComparison.OrdinalIgnoreCase)) hasAlias = true;
         Check("candidates include alias", hasAlias);
 
-        // Backend cache round-trip in an isolated dir (stale entries are ignored).
+        // options.ini round-trip in an isolated dir, plus legacy language.txt migration.
         string bdir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "winstall-test-" + System.Guid.NewGuid().ToString("N"));
-        Backend.CacheDirOverride = bdir;
+        Options.DirOverride = bdir;
         try
         {
-            Backend.WriteCache(@"Z:\definitely\not\here\winget.exe");
-            Check("stale cache ignored", Backend.ReadCache() == null);
+            Options.Reset();
+            Check("options defaults", Options.Language == "" && Options.WingetPath == ""
+                && Options.LogsDir == "" && Options.Silent);
             string self = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            Backend.WriteCache(self);
-            Check("cache roundtrip", Backend.ReadCache() == self);
+            Options.Language = "ru";
+            Options.WingetPath = self;
+            Options.LogsDir = bdir;
+            Options.Silent = false;
+            Options.Save();
+            Options.Reset();
+            Check("options roundtrip", Options.Language == "ru" && Options.WingetPath == self
+                && Options.LogsDir == bdir && !Options.Silent);
+            // Stale winget path is kept verbatim (existence is checked by Backend, not here).
+            Options.WingetPath = @"Z:\definitely\not\here\winget.exe";
+            Check("options keeps stale path", Options.WingetPath.EndsWith("winget.exe"));
+            // Legacy migration: no options.ini, old language.txt present.
+            System.IO.File.Delete(System.IO.Path.Combine(bdir, "options.ini"));
+            System.IO.File.WriteAllText(System.IO.Path.Combine(bdir, "language.txt"), "ru");
+            Options.Reset();
+            Check("legacy language migrated", Options.Language == "ru");
+            Check("legacy file consumed", !System.IO.File.Exists(System.IO.Path.Combine(bdir, "language.txt")));
         }
         finally
         {
-            Backend.CacheDirOverride = null;
+            Options.DirOverride = null;
+            Options.Reset();
             try { System.IO.Directory.Delete(bdir, true); } catch { }
         }
+
+        // --log file wiring and silent toggle.
+        var bp3 = new PackageInfo();
+        bp3.Id = "Valve.Steam";
+        string withLog = WingetRunner.BuildArgs("install", bp3, @"C:\logs", true);
+        Check("log flag wired", withLog.Contains("--log \"C:\\logs\\winstall-install-Valve.Steam-"));
+        Check("no log without dir", !WingetRunner.BuildArgs("install", bp3, "", true).Contains("--log"));
+        Check("no log when null", !WingetRunner.BuildArgs("install", bp3, null, true).Contains("--log"));
+        Check("non-silent omits flag", !WingetRunner.BuildArgs("install", bp3, null, false).Contains("--silent"));
+        Check("silent default kept", WingetRunner.BuildArgs("install", bp3).Contains("--silent"));
+        // Live backend resolve: sane result plus cache file (tolerates machines without winget).
+        string bdir2 = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "winstall-test2-" + System.Guid.NewGuid().ToString("N"));
+        Options.DirOverride = bdir2;
+        try
+        {
+            Options.Reset();
+            string live = Backend.ResolveExe();
+            Check("live resolve sane", live == null || live.EndsWith("winget.exe", StringComparison.OrdinalIgnoreCase));
+            if (live != null)
+                Check("resolve cached to file", System.IO.File.Exists(System.IO.Path.Combine(bdir2, "options.ini")));
+            Backend.Invalidate();
+            Check("invalidate clears", Options.WingetPath == "");
+        }
+        finally
+        {
+            Options.DirOverride = null;
+            Options.Reset();
+            try { System.IO.Directory.Delete(bdir2, true); } catch { }
+        }
+        // Scheduler task: full cycle (create, verify, delete).
         try { AutoCheck.Disable(); } catch { }
         Check("task initially off", !AutoCheck.IsEnabled());
         string enErr = AutoCheck.Enable();

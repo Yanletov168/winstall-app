@@ -345,21 +345,49 @@ namespace winstall
             description = sb.ToString().Trim();
         }
 
-        public static string BuildArgs(string verb, PackageInfo pkg)
+        /// <summary>
+        /// Builds the winget command line. logDir (when set) redirects the installer
+        /// log to a per-operation file inside it; silent=false leaves the installer
+        /// UI at its defaults instead of forcing --silent.
+        /// </summary>
+        public static string BuildArgs(string verb, PackageInfo pkg, string logDir, bool silent)
         {
             // ARP rows upgrade by the linked winget id (see UpgradeId).
             string useId = verb == "upgrade" ? pkg.EffectiveUpgradeId : pkg.Id;
             string idQ = "\"" + useId.Replace("\"", "") + "\"";
             string common = "--id " + idQ + " --accept-source-agreements --disable-interactivity ";
+            string mode = silent ? "--silent" : "";
+            string log = BuildLogArg(verb, useId, logDir);
             switch (verb)
             {
                 // NOTE: uninstall has no --accept-package-agreements. Passing it makes
                 // winget print usage and exit 0x8A150002. install/upgrade keep the flag.
-                case "install": return "install " + common + "--accept-package-agreements --silent";
-                case "upgrade": return "upgrade " + common + "--accept-package-agreements --silent";
-                case "uninstall": return "uninstall " + common + "--silent";
-                default: return verb + " " + common;
+                case "install": return ("install " + common + "--accept-package-agreements " + mode + log).TrimEnd();
+                case "upgrade": return ("upgrade " + common + "--accept-package-agreements " + mode + log).TrimEnd();
+                case "uninstall": return ("uninstall " + common + mode + log).TrimEnd();
+                default: return (verb + " " + common + log).TrimEnd();
             }
+        }
+
+        public static string BuildArgs(string verb, PackageInfo pkg)
+        {
+            return BuildArgs(verb, pkg, null, true);
+        }
+
+        internal static string BuildLogArg(string verb, string id, string logDir)
+        {
+            if (string.IsNullOrWhiteSpace(logDir)) return "";
+            try
+            {
+                Directory.CreateDirectory(logDir);
+                string safe = id.Replace('\\', '.').Replace('/', '.');
+                foreach (var c in Path.GetInvalidFileNameChars()) safe = safe.Replace(c, '_');
+                if (safe.Length > 60) safe = safe.Substring(0, 60);
+                string file = string.Format(
+                    "winstall-{0}-{1}-{2:yyyyMMdd-HHmmss}.log", verb, safe, DateTime.Now);
+                return " --log \"" + Path.Combine(logDir, file).Replace("\"", "") + "\"";
+            }
+            catch { return ""; }
         }
     }
 }

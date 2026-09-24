@@ -45,8 +45,8 @@ namespace winstall
         public static void Startup()
         {
             Rescan();
-            string want = LoadSaved();
-            if (want == null)
+            string want = Options.Language;
+            if (want == "")
             {
                 try { want = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName; }
                 catch { want = "en"; }
@@ -119,40 +119,11 @@ namespace winstall
             }
             current = map;
             Code = info.Code;
-            if (save) SaveCode(Code);
-        }
-
-        private static string SavedPathExe { get { return Path.Combine(ExeDir, "language.txt"); } }
-
-        private static string SavedPathAppData
-        {
-            get
+            if (save)
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "winstall", "language.txt");
+                Options.Language = Code;
+                Options.Save();
             }
-        }
-
-        private static string LoadSaved()
-        {
-            try { if (File.Exists(SavedPathExe)) return File.ReadAllText(SavedPathExe, Encoding.UTF8).Trim(); }
-            catch { }
-            try { if (File.Exists(SavedPathAppData)) return File.ReadAllText(SavedPathAppData, Encoding.UTF8).Trim(); }
-            catch { }
-            return null;
-        }
-
-        private static void SaveCode(string code)
-        {
-            try { File.WriteAllText(SavedPathExe, code, Encoding.UTF8); return; }
-            catch { }
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(SavedPathAppData));
-                File.WriteAllText(SavedPathAppData, code, Encoding.UTF8);
-            }
-            catch { }
         }
 
         /// <summary>Parses a locale file: {"code":"xx","name":"...","strings":{...}}.</summary>
@@ -265,6 +236,10 @@ namespace winstall
             embeddedEn["menu_sel_upd"] = "Select all updatable";
             embeddedEn["menu_uncheck"] = "Uncheck all";
             embeddedEn["menu_logs"] = "Open winget logs folder";
+            embeddedEn["menu_logsdir"] = "Winget log folder…";
+            embeddedEn["menu_logs_default"] = "Default winget logs";
+            embeddedEn["dlg_logsdir"] = "Select a folder for winget installer logs:";
+            embeddedEn["status_logsdir"] = "Log folder: {0}";
             embeddedEn["menu_about"] = "About";
             embeddedEn["menu_exit"] = "Exit";
             embeddedEn["menu_lang"] = "Language";
@@ -340,6 +315,7 @@ namespace winstall
             embeddedEn["act_uninstall"] = "uninstall";
             embeddedEn["act_none"] = "";
             embeddedEn["menu_autocheck"] = "Auto-check for updates";
+            embeddedEn["menu_silent"] = "Silent install";
             embeddedEn["msg_auto_on_t"] = "Auto-check";
             embeddedEn["msg_auto_on"] = "Enabled, no admin rights needed:\n\u2022 autostart at logon (HKCU Run key),\n\u2022 check on wake (the \\winstall\\winstall-wake task).\n\nwinstall will quietly check for updates and show a notification with the count.";
             embeddedEn["msg_auto_off_t"] = "Auto-check";
