@@ -385,18 +385,16 @@ namespace winstall
             string exe = Backend.ResolveExe();
             if (exe == null)
             {
+                // No backend, no app: offer the App Installer like the Inno setup
+                // does, then exit either way. Refusal simply closes the program.
                 var dr = MessageBox.Show(this, L.T("msg_no_backend"), L.T("msg_no_backend_t"),
                     MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (dr == DialogResult.Yes)
                 {
                     try { System.Diagnostics.Process.Start(Backend.DownloadPageUrl); }
-                    catch (Exception ex2)
-                    {
-                        MessageBox.Show(this, L.F("msg_err", ex2.Message), L.T("msg_err_t"),
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
+                    catch { }
                 }
-                lblStatus.Text = L.T("status_no_backend");
+                Close();
                 return;
             }
 

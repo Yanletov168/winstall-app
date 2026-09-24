@@ -276,8 +276,7 @@ namespace winstall
             embeddedEn["status_removing"] = "Removing: {0}\u2026";
             embeddedEn["status_installing"] = "Installing fresh: {0}\u2026";
             embeddedEn["msg_no_backend_t"] = "WinGet not found";
-            embeddedEn["msg_no_backend"] = "No system-wide WinGet was found.\n\nwinstall is a frontend and needs the Windows Package Manager to work.\n\nPress Yes to open the official download page (App Installer), install it, then restart winstall.";
-            embeddedEn["status_no_backend"] = "WinGet not found. Install App Installer, then restart winstall.";
+            embeddedEn["msg_no_backend"] = "WinGet was not found on this system.\n\nwinstall needs the system-wide Windows Package Manager.\n\nDownload and install the official App Installer now?";
             embeddedEn["check_missing"] = "WinGet is not installed, updates cannot be checked.";
             embeddedEn["msg_err_t"] = "Error";
             embeddedEn["msg_winget_err"] = "winget error:\n{0}";

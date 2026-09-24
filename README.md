@@ -72,11 +72,13 @@ WinGet itself requires Windows 10 1809 or newer.
 
 Portable builds need a system-wide WinGet. On first launch winstall probes
 once (PATH plus the App Installer alias) and caches a working location in
-`backend.txt` next to the exe (AppData fallback). A missing backend is
+`options.ini` (`winget_path` key, AppData fallback). A missing backend is
 re-probed on every launch, so installing App Installer later just works, and
 a backend that fails at runtime invalidates the cache and is re-detected once.
-If no backend is found, the app shows a guidance dialog linking to the
-official download page instead of failing silently.
+If no backend is found, the app offers to install the official App Installer
+(the same offer the setup makes) and then exits either way: Yes opens the
+download page, No just closes. Refusing means no app — winstall never runs
+without a backend.
 
 There is intentionally no bundled WinGet fallback: `winget.exe` alone does
 not work — it needs the registered App Installer package (MSIX identity and

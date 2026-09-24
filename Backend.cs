@@ -6,7 +6,7 @@ namespace winstall
     /// <summary>
     /// WinGet backend selection. winstall never reimplements the package manager:
     /// it uses the system-wide winget and remembers a working location in
-    /// backend.txt (next to the exe, AppData fallback). A missing backend is
+    /// options.ini (winget_path key, next to the exe, AppData fallback). A missing backend is
     /// re-probed on every launch so installing App Installer later just works;
     /// a backend that fails at runtime invalidates the cache and is re-detected once.
     /// </summary>
