@@ -11,7 +11,7 @@
     <AssemblyName>winstall</AssemblyName>
     <RootNamespace>winstall</RootNamespace>
     <ApplicationIcon>icon.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
+    <Version>1.1.2</Version>
     <!-- Plain Win32 look, no extra dependencies. Builds with VS2019+ / BuildTools. -->
     <!-- Runs out of the box on Windows 10 IoT Enterprise LTSC 21H2 (in-box .NET Framework 4.8). -->
   </PropertyGroup>
