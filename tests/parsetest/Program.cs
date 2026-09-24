@@ -306,6 +306,8 @@ class P {
                         catch { }
                     }
                 }
+                CheckMenuPaint(f);
+                CheckSubmenuPaint(f);
                 f.Close();
             }
         }
@@ -314,6 +316,137 @@ class P {
             Options.DirOverride = null;
             Options.Reset();
             try { System.IO.Directory.Delete(tdir, true); } catch { }
+        }
+    }
+
+    static void CheckMenuPaint(MainForm f)
+    {
+        // Opens the real hamburger menu and screen-captures it: a dark menu must
+        // show light text/checks/arrows. Skipped where the session has no screen.
+        Options.Theme = "dark";
+        f.ApplyTheme();
+        var menu = f.MenuForTest;
+        menu.Show(f, new System.Drawing.Point(600, 40));
+        try
+        {
+            System.Windows.Forms.Application.DoEvents();
+            System.Threading.Thread.Sleep(800);
+            System.Drawing.Rectangle r = menu.Bounds;
+            if (r.Width < 50 || r.Height < 50) throw new Exception("menu did not open");
+            using (var bmp = new System.Drawing.Bitmap(r.Width, r.Height))
+            {
+                using (var g = System.Drawing.Graphics.FromImage(bmp))
+                    g.CopyFromScreen(r.Location, System.Drawing.Point.Empty, r.Size);
+                long bright = 0, dark = 0, n = 0;
+                for (int y = 0; y < bmp.Height; y += 3)
+                    for (int x = 0; x < bmp.Width; x += 3)
+                    {
+                        System.Drawing.Color px = bmp.GetPixel(x, y);
+                        int v = (px.R + px.G + px.B) / 3;
+                        if (v > 150) bright++;
+                        else if (v < 80) dark++;
+                        n++;
+                    }
+                if (n > 0 && bright == 0 && dark == 0)
+                {
+                    Console.WriteLine("SKIP menu pixels (no screen in session)");
+                    return;
+                }
+                if (bright * 40 < n) throw new Exception("menu has no light content");
+                if (dark * 40 < n) throw new Exception("menu has no dark background");
+                // Submenu arrows live in the right strip; separators are dim, so any
+                // bright pixel there is a painted arrow.
+                long arrowBright = 0, strip = 0;
+                for (int y = 0; y < bmp.Height; y += 2)
+                    for (int x = bmp.Width - 35; x < bmp.Width - 8; x += 2)
+                    {
+                        System.Drawing.Color px = bmp.GetPixel(x, y);
+                        if ((px.R + px.G + px.B) / 3 > 150) arrowBright++;
+                        strip++;
+                    }
+                if (arrowBright == 0) throw new Exception("no submenu arrows painted");
+                try
+                {
+                    using (var shot = (System.Drawing.Bitmap)bmp.Clone())
+                        shot.Save(System.IO.Path.Combine(
+                            System.IO.Path.GetTempPath(), "winstall-shot-menu.png"));
+                }
+                catch { }
+            }
+        }
+        finally
+        {
+            try { menu.Close(); } catch { }
+            Options.Theme = "system";
+            f.ApplyTheme();
+        }
+    }
+
+    static void CheckSubmenuPaint(MainForm f)
+    {
+        // Proves the white check glyph paints: a temporary checked probe item is
+        // added to the real menu and captured. Skipped where there is no screen.
+        Options.Theme = "dark";
+        f.ApplyTheme();
+        var menu = f.MenuForTest;
+        var probe = new System.Windows.Forms.ToolStripMenuItem("probe");
+        probe.Checked = true;
+        probe.BackColor = Theme.Current.MenuBg;
+        probe.ForeColor = Theme.Current.MenuText;
+        menu.Show(f, new System.Drawing.Point(600, 40));
+        try
+        {
+            System.Windows.Forms.Application.DoEvents();
+            System.Threading.Thread.Sleep(800);
+            menu.Items.Add(probe);
+            System.Windows.Forms.Application.DoEvents();
+            System.Threading.Thread.Sleep(800);
+            System.Drawing.Rectangle r = menu.Bounds;
+            if (r.Width < 50 || r.Height < 50) throw new Exception("menu did not open");
+            using (var bmp = new System.Drawing.Bitmap(r.Width, r.Height))
+            {
+                using (var g = System.Drawing.Graphics.FromImage(bmp))
+                    g.CopyFromScreen(r.Location, System.Drawing.Point.Empty, r.Size);
+                long checkBright = 0, n = 0;
+                for (int y = 0; y < bmp.Height; y += 2)
+                    for (int x = 6; x < 26 && x < bmp.Width; x += 2)
+                    {
+                        System.Drawing.Color px = bmp.GetPixel(x, y);
+                        if ((px.R + px.G + px.B) / 3 > 150) checkBright++;
+                        n++;
+                    }
+                if (n > 0 && checkBright == 0)
+                {
+                    // All black: session has no screen, nothing to verify against.
+                    bool anyContent = false;
+                    for (int y = 0; y < bmp.Height && !anyContent; y += 4)
+                        for (int x = 0; x < bmp.Width; x += 4)
+                        {
+                            System.Drawing.Color px = bmp.GetPixel(x, y);
+                            if ((px.R + px.G + px.B) / 3 > 20) { anyContent = true; break; }
+                        }
+                    if (!anyContent)
+                    {
+                        Console.WriteLine("SKIP submenu pixels (no screen in session)");
+                        return;
+                    }
+                    throw new Exception("no check glyph painted");
+                }
+                try
+                {
+                    using (var shot = (System.Drawing.Bitmap)bmp.Clone())
+                        shot.Save(System.IO.Path.Combine(
+                            System.IO.Path.GetTempPath(), "winstall-shot-submenu.png"));
+                }
+                catch { }
+            }
+        }
+        finally
+        {
+            try { menu.Items.Remove(probe); } catch { }
+            try { menu.Close(); } catch { }
+            Options.Theme = "system";
+            f.ApplyTheme();
         }
     }
 

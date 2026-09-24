@@ -119,7 +119,7 @@ namespace winstall
             if (menu == null) return;
             Palette c = Current;
             menu.Renderer = c == Dark
-                ? (ToolStripRenderer)new ToolStripProfessionalRenderer(new DarkTable(c))
+                ? (ToolStripRenderer)new DarkRenderer(c)
                 : (ToolStripRenderer)new ToolStripProfessionalRenderer();
             menu.BackColor = c.MenuBg;
             menu.ForeColor = c.MenuText;
@@ -188,6 +188,74 @@ namespace winstall
             {
                 e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
                 e.Graphics.DrawLine(p, e.Bounds.Right - 1, e.Bounds.Top, e.Bounds.Right - 1, e.Bounds.Bottom);
+            }
+        }
+
+        private sealed class DarkRenderer : ToolStripProfessionalRenderer
+        {
+            public DarkRenderer(Palette palette) : base(new DarkTable(palette)) { }
+
+            // White check glyph; the table only tints its background.
+            protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
+            {
+                Rectangle r = e.ImageRectangle;
+                int s = Math.Min(r.Width, r.Height);
+                if (s < 6) return;
+                int m = Math.Max(2, s / 5);
+                Point[] pts = new Point[]
+                {
+                    new Point(r.Left + m, r.Top + r.Height / 2),
+                    new Point(r.Left + r.Width / 2 - 1, r.Bottom - m),
+                    new Point(r.Right - m, r.Top + m)
+                };
+                var old = e.Graphics.SmoothingMode;
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (var pen = new Pen(Color.White, Math.Max(2, s / 8)))
+                    e.Graphics.DrawLines(pen, pts);
+                e.Graphics.SmoothingMode = old;
+            }
+
+            // White submenu arrow; the default one follows the OS theme and vanishes on dark.
+            protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+            {
+                Rectangle r = e.ArrowRectangle;
+                int s = Math.Min(r.Width, r.Height);
+                if (s < 6) return;
+                int m = Math.Max(2, s / 4);
+                Point[] tri;
+                if (e.Direction == ArrowDirection.Left)
+                    tri = new Point[]
+                    {
+                        new Point(r.Right - m, r.Top + m),
+                        new Point(r.Right - m, r.Bottom - m),
+                        new Point(r.Left + m, r.Top + r.Height / 2)
+                    };
+                else if (e.Direction == ArrowDirection.Up)
+                    tri = new Point[]
+                    {
+                        new Point(r.Left + m, r.Bottom - m),
+                        new Point(r.Right - m, r.Bottom - m),
+                        new Point(r.Left + r.Width / 2, r.Top + m)
+                    };
+                else if (e.Direction == ArrowDirection.Down)
+                    tri = new Point[]
+                    {
+                        new Point(r.Left + m, r.Top + m),
+                        new Point(r.Right - m, r.Top + m),
+                        new Point(r.Left + r.Width / 2, r.Bottom - m)
+                    };
+                else
+                    tri = new Point[]
+                    {
+                        new Point(r.Left + m, r.Top + m),
+                        new Point(r.Left + m, r.Bottom - m),
+                        new Point(r.Right - m, r.Top + r.Height / 2)
+                    };
+                var old = e.Graphics.SmoothingMode;
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (var brush = new SolidBrush(Color.White))
+                    e.Graphics.FillPolygon(brush, tri);
+                e.Graphics.SmoothingMode = old;
             }
         }
 

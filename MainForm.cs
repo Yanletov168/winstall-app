@@ -286,6 +286,9 @@ namespace winstall
 
         internal int RowCount { get { return lv.Items.Count; } }
 
+        // Test seam: the hamburger menu for paint verification.
+        internal ContextMenuStrip MenuForTest { get { return hamburger; } }
+
         // Test seam: full client-area bitmap for theme verification.
         internal Bitmap CaptureForm()
         {
