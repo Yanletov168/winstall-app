@@ -243,6 +243,10 @@ namespace winstall
             embeddedEn["menu_about"] = "About";
             embeddedEn["menu_exit"] = "Exit";
             embeddedEn["menu_lang"] = "Language";
+            embeddedEn["menu_theme"] = "Theme";
+            embeddedEn["theme_dark"] = "Dark";
+            embeddedEn["theme_light"] = "Light";
+            embeddedEn["theme_system"] = "Follow system";
             embeddedEn["col_program"] = "Program";
             embeddedEn["col_version"] = "Version";
             embeddedEn["search_cue"] = "Search the whole winget database\u2026 (empty = installed)";

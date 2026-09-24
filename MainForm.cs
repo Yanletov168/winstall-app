@@ -72,8 +72,25 @@ namespace winstall
             searchTimer.Interval = 500;
             searchTimer.Tick += delegate { searchTimer.Stop(); OnSearchGo(); };
 
-            Shown += delegate { RefreshAll(); };
-            FormClosed += delegate { if (icons != null) icons.Dispose(); };
+            Shown += delegate { ApplyTheme(); RefreshAll(); };
+            FormClosed += delegate
+            {
+                try { Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged; }
+                catch { }
+                if (icons != null) icons.Dispose();
+            };
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        }
+
+        private void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+        {
+            // Live switch only makes sense in system-following mode; the check is cheap.
+            if (Options.Theme != "system") return;
+            try
+            {
+                if (IsHandleCreated) BeginInvoke(new Action(ApplyTheme));
+            }
+            catch { }
         }
 
         private void BuildUi()
@@ -186,6 +203,7 @@ namespace winstall
             lblCount.Dock = DockStyle.Right;
             lblCount.Padding = new Padding(6, 5, 6, 0);
             lblCount.ForeColor = SystemColors.GrayText;
+            lblCount.Tag = "muted";
             searchRow.Controls.Add(lblCount);
 
             txtSearch = new TextBox();
@@ -222,6 +240,10 @@ namespace winstall
             lv.GridLines = false;
             lv.MultiSelect = false;
             lv.HideSelection = false;
+            lv.OwnerDraw = true;
+            lv.DrawColumnHeader += delegate (object s, DrawListViewColumnHeaderEventArgs e) { Theme.DrawHeader(e); };
+            lv.DrawItem += delegate (object s, DrawListViewItemEventArgs e) { e.DrawDefault = true; };
+            lv.DrawSubItem += delegate (object s, DrawListViewSubItemEventArgs e) { e.DrawDefault = true; };
             lv.SmallImageList = icons.Images;
             colName = lv.Columns.Add(L.T("col_program"), 400);
             colVer = lv.Columns.Add(L.T("col_version"), 110);
@@ -246,6 +268,55 @@ namespace winstall
             Controls.Add(status);
 
             FitColumns();
+            ApplyTheme();
+        }
+
+        internal void ApplyTheme()
+        {
+            Theme.Apply(this, hamburger, Theme.IsDark(Options.Theme));
+            foreach (ListViewItem it in lv.Items) PaintRow(it);
+            UpdateDesc();
+        }
+
+        internal int RowCount { get { return lv.Items.Count; } }
+
+        // Test seam: average color of the list header area for theme verification.
+        internal Color SampleHeaderColor()
+        {
+            if (!lv.IsHandleCreated || lv.ClientSize.Width < 10) return Color.Empty;
+            using (var bmp = new Bitmap(lv.ClientSize.Width, lv.ClientSize.Height))
+            {
+                lv.DrawToBitmap(bmp, new Rectangle(Point.Empty, bmp.Size));
+                long r = 0, n = 0;
+                for (int x = 8; x < bmp.Width - 8; x += 13)
+                    for (int y = 6; y < 14 && y < bmp.Height; y += 2)
+                    {
+                        Color px = bmp.GetPixel(x, y);
+                        r += px.R; n++;
+                    }
+                if (n == 0) return Color.Empty;
+                int avg = (int)(r / n);
+                return Color.FromArgb(avg, avg, avg);
+            }
+        }
+
+        private void PaintRow(ListViewItem it)
+        {
+            var p = it.Tag as PackageInfo;
+            if (p == null) return;
+            Theme.Palette c = Theme.Current;
+            bool check = it.Checked;
+            string glyph = ActionGlyph(p.ActionFor(check));
+            if (glyph == "" && p.IsInstalled && p.HasUpdate) glyph = "↑";
+            if (it.SubItems.Count > 2)
+            {
+                it.SubItems[2].Text = glyph;
+                it.SubItems[2].ForeColor = check ? c.CheckedGreen : c.GrayText;
+            }
+            if (it.SubItems.Count > 1)
+                it.SubItems[1].ForeColor = check ? c.CheckedGreen : c.VersionBlue;
+            it.ForeColor = check ? c.CheckedGreen
+                : (p.IsInstalled ? c.Text : c.DimText);
         }
 
         private void FitColumns()
@@ -296,6 +367,23 @@ namespace winstall
                 mLang.DropDownItems.Add(mi);
             }
             hamburger.Items.Add(mLang);
+            var mTheme = new ToolStripMenuItem(L.T("menu_theme"));
+            string[] themeCodes = new string[] { "dark", "light", "system" };
+            string[] themeKeys = new string[] { "theme_dark", "theme_light", "theme_system" };
+            for (int i = 0; i < themeCodes.Length; i++)
+            {
+                string code = themeCodes[i];
+                var mi = new ToolStripMenuItem(L.T(themeKeys[i]));
+                mi.Checked = code.Equals(Options.Theme, StringComparison.OrdinalIgnoreCase);
+                mi.Click += delegate
+                {
+                    Options.Theme = code;
+                    Options.Save();
+                    ApplyTheme();
+                };
+                mTheme.DropDownItems.Add(mi);
+            }
+            hamburger.Items.Add(mTheme);
             hamburger.Items.Add(L.T("menu_about"), null, delegate { ShowAbout(); });
             hamburger.Items.Add(new ToolStripSeparator());
             hamburger.Items.Add(L.T("menu_exit"), null, delegate { Close(); });
@@ -336,17 +424,8 @@ namespace winstall
                 {
                     var p = it.Tag as PackageInfo;
                     if (p == null) continue;
-                    bool c = keep.Contains(p);
-                    it.Checked = c;
-                    if (it.SubItems.Count > 2)
-                    {
-                        it.SubItems[2].Text = ActionGlyph(p.ActionFor(c));
-                        it.SubItems[2].ForeColor = c ? Color.ForestGreen : SystemColors.GrayText;
-                    }
-                    if (it.SubItems.Count > 1)
-                        it.SubItems[1].ForeColor = c ? Color.ForestGreen : Color.MidnightBlue;
-                    it.ForeColor = c ? Color.ForestGreen
-                        : (p.IsInstalled ? lv.ForeColor : Color.DimGray);
+                    it.Checked = keep.Contains(p);
+                    PaintRow(it);
                 }
             }
             finally { lv.ItemChecked += Lv_ItemChecked; }
@@ -552,21 +631,7 @@ namespace winstall
             if (syncing) return;
             // ItemChecked also fires during rebuilds; ignore those.
             if (e.Item == null || e.Item.Tag == null) return;
-            var p = (PackageInfo)e.Item.Tag;
-            var act = p.ActionFor(e.Item.Checked);
-            if (e.Item.SubItems.Count > 2)
-            {
-                e.Item.SubItems[2].Text = ActionGlyph(act);
-                e.Item.SubItems[2].ForeColor = e.Item.Checked ? Color.ForestGreen : SystemColors.GrayText;
-            }
-            if (e.Item.SubItems.Count > 1)
-                e.Item.SubItems[1].ForeColor = e.Item.Checked ? Color.ForestGreen : Color.MidnightBlue;
-            if (e.Item.Checked)
-                e.Item.ForeColor = Color.ForestGreen;
-            else if (p.IsInstalled)
-                e.Item.ForeColor = lv.ForeColor;
-            else
-                e.Item.ForeColor = Color.DimGray;
+            PaintRow(e.Item);
             RefreshCounts();
         }
 
@@ -628,7 +693,7 @@ namespace winstall
         {
             if (lv.SelectedItems.Count == 0)
             {
-                txtDesc.ForeColor = SystemColors.GrayText;
+                txtDesc.ForeColor = Theme.Current.GrayText;
                 txtDesc.Text = L.T("desc_legend");
                 return;
             }
@@ -638,7 +703,7 @@ namespace winstall
             string showId = !p.IsInstalled ? p.Id : p.EffectiveUpgradeId;
             if (showId.StartsWith("ARP\\", StringComparison.OrdinalIgnoreCase))
             {
-                txtDesc.ForeColor = SystemColors.WindowText;
+                txtDesc.ForeColor = Theme.Current.Text;
                 txtDesc.Text = BuildBaseDesc(p) + L.T("desc_notfound");
                 return;
             }
@@ -646,12 +711,12 @@ namespace winstall
             string cached;
             if (showCache.TryGetValue(showId, out cached))
             {
-                txtDesc.ForeColor = SystemColors.WindowText;
+                txtDesc.ForeColor = Theme.Current.Text;
                 txtDesc.Text = BuildBaseDesc(p) + cached;
                 return;
             }
 
-            txtDesc.ForeColor = SystemColors.WindowText;
+            txtDesc.ForeColor = Theme.Current.Text;
             txtDesc.Text = BuildBaseDesc(p) + L.T("desc_loading");
 
             int my = ++descSeq;
@@ -1036,15 +1101,7 @@ namespace winstall
                     var p = it.Tag as PackageInfo;
                     if (p == null) continue;
                     it.Checked = p.IsInstalled && p.HasUpdate;
-                    if (it.SubItems.Count > 2)
-                    {
-                        it.SubItems[2].Text = ActionGlyph(p.ActionFor(it.Checked));
-                        it.SubItems[2].ForeColor = it.Checked ? Color.ForestGreen : SystemColors.GrayText;
-                    }
-                    if (it.SubItems.Count > 1)
-                        it.SubItems[1].ForeColor = it.Checked ? Color.ForestGreen : Color.MidnightBlue;
-                    it.ForeColor = it.Checked ? Color.ForestGreen
-                        : (p.IsInstalled ? lv.ForeColor : Color.DimGray);
+                    PaintRow(it);
                 }
             }
             finally { lv.ItemChecked += Lv_ItemChecked; }
@@ -1059,16 +1116,7 @@ namespace winstall
                 foreach (ListViewItem it in lv.Items)
                 {
                     it.Checked = false;
-                    var p = it.Tag as PackageInfo;
-                    if (it.SubItems.Count > 2)
-                    {
-                        it.SubItems[2].Text = (p != null && p.HasUpdate) ? "↑" : "";
-                        it.SubItems[2].ForeColor = SystemColors.GrayText;
-                    }
-                    if (it.SubItems.Count > 1)
-                        it.SubItems[1].ForeColor = Color.MidnightBlue;
-                    if (p != null)
-                        it.ForeColor = p.IsInstalled ? lv.ForeColor : Color.DimGray;
+                    PaintRow(it);
                 }
             }
             finally { lv.ItemChecked += Lv_ItemChecked; }

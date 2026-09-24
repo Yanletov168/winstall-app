@@ -33,6 +33,7 @@ namespace winstall
         private static string updFlags = DefaultUpdFlags;
         private static string addFlags = DefaultAddFlags;
         private static string remFlags = DefaultRemFlags;
+        private static string theme = "system";
 
         // "" = follow the OS language.
         public static string Language
@@ -57,8 +58,7 @@ namespace winstall
 
         // One flag set per mutating verb. Empty means "bare winget call"
         // (note: without --disable-interactivity winget may prompt and hang).
-        public static string UpdFlags
-        {
+        public static string UpdFlags        {
             get { EnsureLoaded(); return updFlags; }
             set { EnsureLoaded(); updFlags = (value ?? "").Trim(); }
         }
@@ -73,6 +73,18 @@ namespace winstall
         {
             get { EnsureLoaded(); return remFlags; }
             set { EnsureLoaded(); remFlags = (value ?? "").Trim(); }
+        }
+
+        // light, dark or system. Anything else falls back to system.
+        public static string Theme
+        {
+            get { EnsureLoaded(); return theme; }
+            set
+            {
+                EnsureLoaded();
+                value = (value ?? "").Trim().ToLowerInvariant();
+                theme = (value == "light" || value == "dark") ? value : "system";
+            }
         }
 
         public static void EnsureLoaded()
@@ -91,6 +103,7 @@ namespace winstall
             updFlags = DefaultUpdFlags;
             addFlags = DefaultAddFlags;
             remFlags = DefaultRemFlags;
+            theme = "system";
         }
 
         public static void Save()
@@ -104,6 +117,7 @@ namespace winstall
             sb.AppendLine("upd_flags=" + updFlags);
             sb.AppendLine("add_flags=" + addFlags);
             sb.AppendLine("rem_flags=" + remFlags);
+            sb.AppendLine("theme=" + theme);
             foreach (var p in ConfigFiles())
             {
                 try
@@ -149,6 +163,7 @@ namespace winstall
             if (map.TryGetValue("upd_flags", out v)) updFlags = v.Trim();
             if (map.TryGetValue("add_flags", out v)) addFlags = v.Trim();
             if (map.TryGetValue("rem_flags", out v)) remFlags = v.Trim();
+            if (map.TryGetValue("theme", out v)) Theme = v;
             if (language == "") ImportLegacyLanguage();
         }
 

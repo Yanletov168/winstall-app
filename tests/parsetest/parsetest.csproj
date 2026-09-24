@@ -14,6 +14,9 @@
   <!-- The tests compile the real sources directly, no copies. -->
   <ItemGroup>
     <Compile Include="..\..\Models.cs" Link="Src\Models.cs" />
+    <Compile Include="..\..\Theme.cs" Link="Src\Theme.cs" />
+    <Compile Include="..\..\MainForm.cs" Link="Src\MainForm.cs" />
+    <Compile Include="..\..\IconProvider.cs" Link="Src\IconProvider.cs" />
     <Compile Include="..\..\Options.cs" Link="Src\Options.cs" />
     <Compile Include="..\..\Backend.cs" Link="Src\Backend.cs" />
     <Compile Include="..\..\WingetRunner.cs" Link="Src\WingetRunner.cs" />

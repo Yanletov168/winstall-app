@@ -176,14 +176,17 @@ class P {
             Options.Language = "ru";
             Options.WingetPath = self;
             Options.LogsDir = bdir;
+            Options.Theme = "dark";
             Options.UpdFlags = "--include-unknown";
             Options.AddFlags = "";
             Options.RemFlags = "--silent";
             Options.Save();
             Options.Reset();
             Check("options roundtrip", Options.Language == "ru" && Options.WingetPath == self
-                && Options.LogsDir == bdir && Options.UpdFlags == "--include-unknown"
+                && Options.LogsDir == bdir && Options.Theme == "dark" && Options.UpdFlags == "--include-unknown"
                 && Options.AddFlags == "" && Options.RemFlags == "--silent");
+            Options.Theme = "banana";
+            Check("theme falls back to system", Options.Theme == "system");
             // Stale winget path is kept verbatim (existence is checked by Backend, not here).
             Options.WingetPath = @"Z:\definitely\not\here\winget.exe";
             Check("options keeps stale path", Options.WingetPath.EndsWith("winget.exe"));
@@ -230,7 +233,72 @@ class P {
         Check("task disable" + (disErr == null ? "" : ": " + disErr), disErr == null);
         Check("task gone", !AutoCheck.IsEnabled());
 
+        // Theming: real shown form on an STA thread, header pixels per mode.
+        // Skipped where no winget backend exists (the form would sit on a dialog).
+        if (Backend.ResolveExe() == null)
+        {
+            Console.WriteLine("SKIP theme UI test (no winget backend)");
+        }
+        else
+        {
+            Exception themeErr = null;
+            var t = new System.Threading.Thread(delegate ()
+            {
+                try { RunThemeUiTest(); }
+                catch (Exception ex) { themeErr = ex; }
+            });
+            t.SetApartmentState(System.Threading.ApartmentState.STA);
+            t.Start();
+            if (!t.Join(180000)) themeErr = new TimeoutException("theme UI test hung");
+            Check("theme UI cycle", themeErr == null);
+            if (themeErr != null) Console.WriteLine("theme error: " + themeErr);
+        }
+
         Console.WriteLine("done");
         return 0;
+    }
+
+    static void RunThemeUiTest()
+    {
+        string tdir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "winstall-theme-" + System.Guid.NewGuid().ToString("N"));
+        Options.DirOverride = tdir;
+        try
+        {
+            Options.Reset();
+            using (var f = new MainForm())
+            {
+                f.Show();
+                DateTime until = DateTime.Now.AddSeconds(90);
+                while (f.RowCount == 0 && DateTime.Now < until)
+                {
+                    System.Windows.Forms.Application.DoEvents();
+                    System.Threading.Thread.Sleep(500);
+                }
+                if (f.RowCount == 0)
+                    throw new Exception("list never loaded");
+                string[] modes = new string[] { "light", "dark", "system" };
+                foreach (var m in modes)
+                {
+                    Options.Theme = m;
+                    f.ApplyTheme();
+                    System.Windows.Forms.Application.DoEvents();
+                    System.Threading.Thread.Sleep(800);
+                    System.Drawing.Color h = f.SampleHeaderColor();
+                    if (h.IsEmpty) throw new Exception("no header sample in " + m);
+                    bool expectDark = m == "dark" || (m == "system" && Theme.SystemUsesDark());
+                    if (expectDark && h.R > 90)
+                        throw new Exception("header not dark in " + m + " (R=" + h.R + ")");
+                    if (!expectDark && h.R < 180)
+                        throw new Exception("header not light in " + m + " (R=" + h.R + ")");
+                }
+                f.Close();
+            }
+        }
+        finally
+        {
+            Options.DirOverride = null;
+            Options.Reset();
+            try { System.IO.Directory.Delete(tdir, true); } catch { }
+        }
     }
 }

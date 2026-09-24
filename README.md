@@ -22,6 +22,7 @@ Windows 11 and newer work through compatibility.
   tray balloon; clicking it opens winstall.
 - UI localizations via `locales/*.json` (English, Russian); a new language
   is one file, picked from the ☰ menu.
+- Light, dark and system-following theme, also from the ☰ menu.
 
 ## Installation
 
